@@ -76,9 +76,9 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:stepSize="5"
-                android:value="250"
+                android:value="400"
                 android:valueFrom="25"
-                android:valueTo="600"
+                android:valueTo="1000"
                 app:labelBehavior="gone" />
 
             <com.google.android.material.materialswitch.MaterialSwitch

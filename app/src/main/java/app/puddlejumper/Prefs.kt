@@ -9,7 +9,7 @@ class Prefs(context: Context) {
     private val sp = context.getSharedPreferences("puddlejumper", Context.MODE_PRIVATE)
 
     var fullRangeMeters: Double
-        get() = sp.getFloat("fullRangeMeters", (250 * 1609.344).toFloat()).toDouble()
+        get() = sp.getFloat("fullRangeMeters", 400_000f).toDouble()
         set(v) = sp.edit().putFloat("fullRangeMeters", v.toFloat()).apply()
 
     var reservePercent: Int
@@ -21,8 +21,9 @@ class Prefs(context: Context) {
         set(v) = sp.edit().putBoolean("chargeAtEachStop", v).apply()
 
     var unit: DistanceUnit
-        get() = runCatching { DistanceUnit.valueOf(sp.getString("unit", null)!!) }.getOrDefault(DistanceUnit.MILES)
-        set(v) = sp.edit().putString("unit", v.name).apply()
+        // Metric by default. New key so builds that defaulted to miles don't carry that choice over.
+        get() = runCatching { DistanceUnit.valueOf(sp.getString("distanceUnit", null)!!) }.getOrDefault(DistanceUnit.KILOMETERS)
+        set(v) = sp.edit().putString("distanceUnit", v.name).apply()
 
     var chargerSource: ChargerSourceType
         get() = runCatching { ChargerSourceType.valueOf(sp.getString("source", null)!!) }.getOrDefault(ChargerSourceType.NREL)

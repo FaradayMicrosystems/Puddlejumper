@@ -17,7 +17,7 @@ car's full-charge range, so you can see at a glance how far you can get from eac
   speed (DC fast / Level 2 / Level 1, kW where known), ports, connectors, network, status
   (operational, down / maintenance, planned), hours, pricing, and last-confirmed date.
 - **Steps**: turn-by-turn directions as a list.
-- Settings: miles or km, arrival reserve %, charger data source, API keys.
+- Settings: km (default) or miles, arrival reserve %, charger data source, API keys.
 
 Marker legend: purple **F** = DC fast, blue **2** = Level 2, light blue **1** = Level 1,
 red = down or under maintenance, gray = planned, orange = in use (live sources only).

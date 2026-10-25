@@ -138,7 +138,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     companion object {
-        /** Chargers within this distance of the route line (about 5 miles). */
+        /** Chargers within 8 km of the route line. */
         const val CORRIDOR_M = 8_000.0
     }
 }
