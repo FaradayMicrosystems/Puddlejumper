@@ -1,0 +1,65 @@
+# Puddlejumper
+
+Android navigation prototype for electric vehicles. Every stop on the map shows a circle for your
+car's full-charge range, so you can see at a glance how far you can get from each hop.
+
+## What works in this first version
+
+- OpenStreetMap map with pinch zoom and your location.
+- Add stops by long-pressing the map, searching a place, or tapping a charger and choosing **Add as stop**.
+- **Range circles** at every stop:
+  - Green circle: the distance you can drive from that stop on a full charge (set with the slider).
+  - Orange circle: range left when you arrive at that stop (shown after you tap **Route**).
+- **Route**: driving route through all stops, total distance and time, and range on arrival per leg.
+  Legs that drop below your reserve are marked with ⚠.
+- **Charge to full at each stop** switch. Off means range carries over from stop to stop.
+- **Chargers**: loads charging stations along the route (or around the visible map). Tap one for
+  speed (DC fast / Level 2 / Level 1, kW where known), ports, connectors, network, status
+  (operational, down / maintenance, planned), hours, pricing, and last-confirmed date.
+- **Steps**: turn-by-turn directions as a list.
+- Settings: miles or km, arrival reserve %, charger data source, API keys.
+
+Marker legend: purple **F** = DC fast, blue **2** = Level 2, light blue **1** = Level 1,
+red = down or under maintenance, gray = planned, orange = in use (live sources only).
+
+## Data sources
+
+| Need | Prototype uses | Notes |
+|---|---|---|
+| Map tiles | OpenStreetMap | No key. Fine for testing, not for a published app. |
+| Routing | OSRM public demo server | No key. Testing only. |
+| Search | Nominatim (OSM) | No key. Max 1 request per second. |
+| Chargers | NREL AFDC (US and Canada) | Works with `DEMO_KEY` (low hourly limit). Free key at developer.nrel.gov. |
+| Chargers (optional) | Open Charge Map (worldwide) | Free key at openchargemap.org. |
+
+**PlugShare:** its API needs a paid commercial license; there is no personal license.
+NREL and Open Charge Map do not report live plug availability (free or occupied). For live
+availability, add PlugShare (licensed) or TomTom EV Charging Stations Availability as another
+`ChargerSource` in `core/`.
+
+## Build and run
+
+1. Install Android Studio (it includes the Android SDK and JDK 17+).
+2. Open this folder in Android Studio and let Gradle sync.
+3. Optional: add keys to `local.properties` (this file is not committed):
+   ```
+   NREL_API_KEY=your_nrel_key
+   OCM_API_KEY=your_open_charge_map_key
+   ```
+   You can also paste keys in the app's Settings screen.
+4. Run the `app` configuration on a phone or emulator (Android 8.0 / API 26 or newer).
+
+Command line: `./gradlew :app:assembleDebug` (APK in `app/build/outputs/apk/debug/`),
+and `./gradlew :core:test` for the unit tests.
+
+## Project layout
+
+- `core/` — plain Kotlin, no Android: range math, geodesic circles, route and charger parsing. Unit-tested.
+- `app/` — Android app: map screen, overlays, settings.
+
+## Next steps
+
+- Real turn-by-turn guidance (voice, rerouting, traffic): move the map and routing to the
+  Mapbox Navigation SDK v3. Range circles and charger markers keep working through `core/`.
+- Live charger availability: PlugShare license or TomTom.
+- Range circles are straight-line distance. A road-network "reachable area" (isochrone) is more accurate.

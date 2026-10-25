@@ -1,0 +1,4 @@
+{"station_locator_url":"x","total_results":2,"fuel_stations":[
+{"id":12345,"station_name":"Fast Hub","street_address":"1 Main St","city":"Fresno","state":"CA","zip":"93721","latitude":36.73,"longitude":-119.78,"ev_network":"Electrify America","status_code":"E","ev_level1_evse_num":null,"ev_level2_evse_num":2,"ev_dc_fast_num":6,"ev_connector_types":["J1772","J1772COMBO","CHADEMO"],"access_days_time":"24 hours daily","ev_pricing":"$0.48/kWh","date_last_confirmed":"2026-09-30","updated_at":"2026-10-01T12:00:00Z","extra_field":1},
+{"id":999,"station_name":"Closed Lot","latitude":36.8,"longitude":-119.7,"status_code":"T","ev_level2_evse_num":4,"ev_connector_types":["J1772"]}
+]}

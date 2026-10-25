@@ -1,0 +1,5 @@
+[{"ID":77,"AddressInfo":{"Title":"Mall Chargers","AddressLine1":"5 Mall Rd","Town":"Reno","StateOrProvince":"NV","Postcode":"89501","Latitude":39.52,"Longitude":-119.81},
+"OperatorInfo":{"Title":"ChargePoint"},"StatusType":{"ID":50,"IsOperational":true},
+"Connections":[{"ConnectionType":{"Title":"CCS (Type 1)"},"PowerKW":150.0,"Quantity":4,"LevelID":3},{"ConnectionType":{"Title":"J1772"},"PowerKW":7.2,"Quantity":2,"LevelID":2}],
+"UsageCost":"$0.40/kWh","DateLastStatusUpdate":"2026-10-20T00:00:00Z"},
+{"ID":78,"AddressInfo":{"Title":"Broken","Latitude":39.5,"Longitude":-119.8},"StatusType":{"ID":100,"IsOperational":false},"Connections":[]}]

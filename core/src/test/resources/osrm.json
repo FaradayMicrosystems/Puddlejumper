@@ -1,0 +1,7 @@
+{"code":"Ok","routes":[{"distance":3000.0,"duration":240.0,
+"geometry":{"type":"LineString","coordinates":[[-122.0,37.0],[-122.01,37.01],[-122.02,37.02]]},
+"legs":[{"distance":1000.0,"duration":90.0,"steps":[
+ {"distance":800.0,"name":"Main St","maneuver":{"type":"depart","location":[-122.0,37.0]}},
+ {"distance":200.0,"name":"Oak Ave","maneuver":{"type":"turn","modifier":"left","location":[-122.01,37.01]}},
+ {"distance":0.0,"name":"","maneuver":{"type":"arrive","location":[-122.01,37.01]}}]},
+ {"distance":2000.0,"duration":150.0,"steps":[]}]}],"waypoints":[]}
