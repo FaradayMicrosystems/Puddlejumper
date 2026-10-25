@@ -21,6 +21,17 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
+      # Optional API keys from repository secrets (Settings > Secrets and variables > Actions).
+      - name: Write API keys
+        env:
+          NREL_API_KEY: ${{ secrets.NREL_API_KEY }}
+          OCM_API_KEY: ${{ secrets.OCM_API_KEY }}
+        run: |
+          : > local.properties
+          if [ -n "$NREL_API_KEY" ]; then echo "NREL_API_KEY=$NREL_API_KEY" >> local.properties; fi
+          if [ -n "$OCM_API_KEY" ]; then echo "OCM_API_KEY=$OCM_API_KEY" >> local.properties; fi
+          echo "NREL key set: $([ -n "$NREL_API_KEY" ] && echo yes || echo no), OCM key set: $([ -n "$OCM_API_KEY" ] && echo yes || echo no)"
+
       - name: Unit tests
         run: ./gradlew :core:test --stacktrace
 
@@ -45,3 +56,17 @@ jobs:
           gh release create latest puddlejumper-debug.apk --target "$GITHUB_SHA" --prerelease \
             --title "Latest build (${GITHUB_SHA::7})" \
             --notes "Debug build of main. Open the .apk on an Android 8.0+ phone and allow installs from this source when asked."
+
+      # A versionName with no matching tag yet publishes a full release, named and noted from CHANGELOG.md.
+      - name: Publish versioned release
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION=$(sed -n 's/.*versionName = "\(.*\)".*/\1/p' app/build.gradle.kts)
+          TAG="v$VERSION"
+          if gh release view "$TAG" > /dev/null 2>&1; then echo "$TAG already released"; exit 0; fi
+          awk -v h="## $TAG" 'index($0, h) == 1 {on=1; next} /^## / {on=0} on' CHANGELOG.md > notes.md
+          cp app/build/outputs/apk/debug/app-debug.apk "puddlejumper-$TAG.apk"
+          gh release create "$TAG" "puddlejumper-$TAG.apk" --target "$GITHUB_SHA" --latest \
+            --title "Puddlejumper $TAG" --notes-file notes.md

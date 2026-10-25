@@ -47,10 +47,19 @@ availability, add PlugShare (licensed) or TomTom EV Charging Stations Availabili
    OCM_API_KEY=your_open_charge_map_key
    ```
    You can also paste keys in the app's Settings screen.
+   For the GitHub-built APK, add them as repository secrets named `NREL_API_KEY` and `OCM_API_KEY`
+   (Settings > Secrets and variables > Actions). Keys built into an APK can be extracted from it,
+   so use only free keys here.
 4. Run the `app` configuration on a phone or emulator (Android 8.0 / API 26 or newer).
 
 Command line: `./gradlew :app:assembleDebug` (APK in `app/build/outputs/apk/debug/`),
 and `./gradlew :core:test` for the unit tests.
+
+## Downloads and releases
+
+- Newest build of main: https://github.com/FaradayMicrosystems/Puddlejumper/releases/download/latest/puddlejumper-debug.apk
+- Versioned releases: raise `versionName` in `app/build.gradle.kts`, add a `## vX.Y` section to
+  `CHANGELOG.md`, and push to main. The build publishes "Puddlejumper vX.Y" with the APK.
 
 ## Project layout
 
