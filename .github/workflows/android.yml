@@ -3,9 +3,10 @@ name: Android build
 on:
   push:
     branches: [main]
-    tags: ["v*"]
   pull_request:
   workflow_dispatch:
+  release:
+    types: [published]
 
 jobs:
   build:
@@ -34,13 +35,12 @@ jobs:
           path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
 
-      # A pushed tag like v0.1.0 publishes a GitHub Release with the APK attached.
-      - name: Publish release
-        if: startsWith(github.ref, 'refs/tags/v')
+      # Publishing a GitHub Release attaches the APK to it.
+      - name: Attach APK to release
+        if: github.event_name == 'release'
         env:
           GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}
         run: |
-          cp app/build/outputs/apk/debug/app-debug.apk "puddlejumper-${GITHUB_REF_NAME}-debug.apk"
-          gh release create "$GITHUB_REF_NAME" "puddlejumper-${GITHUB_REF_NAME}-debug.apk" \
-            --title "Puddlejumper ${GITHUB_REF_NAME} (prototype)" \
-            --notes "Install the .apk on Android 8.0 or newer. Allow installs from this source when your phone asks."
+          cp app/build/outputs/apk/debug/app-debug.apk "puddlejumper-${TAG}-debug.apk"
+          gh release upload "$TAG" "puddlejumper-${TAG}-debug.apk" --clobber
