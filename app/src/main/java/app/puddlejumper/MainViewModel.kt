@@ -23,7 +23,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
-data class Waypoint(val name: String, val location: LatLon)
+data class Waypoint(val name: String, val location: LatLon, val isCurrentLocation: Boolean = false)
 
 data class UiState(
     val waypoints: List<Waypoint> = emptyList(),
@@ -71,7 +71,33 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         it.copy(waypoints = it.waypoints.filterIndexed { i, _ -> i != index }, route = null, legs = emptyList())
     }
 
-    fun clear() = _state.update { it.copy(waypoints = emptyList(), route = null, legs = emptyList(), chargers = emptyList()) }
+    /** Last known GPS position; it becomes stop 1 automatically. */
+    private var currentLocation: LatLon? = null
+
+    /** Makes [location] stop 1, unless a current-location stop is already in the list. */
+    fun setCurrentLocation(location: LatLon) {
+        currentLocation = location
+        _state.update {
+            if (it.waypoints.any { w -> w.isCurrentLocation }) it
+            else it.copy(
+                waypoints = listOf(currentLocationStop(location)) + it.waypoints,
+                route = null,
+                legs = emptyList(),
+            )
+        }
+    }
+
+    private fun currentLocationStop(location: LatLon) = Waypoint("My location", location, isCurrentLocation = true)
+
+    /** Removes all stops except your current location, which stays as stop 1. */
+    fun clear() = _state.update {
+        it.copy(
+            waypoints = listOfNotNull(currentLocation?.let(::currentLocationStop)),
+            route = null,
+            legs = emptyList(),
+            chargers = emptyList(),
+        )
+    }
 
     fun setFullRange(valueInUnit: Double) = updateSettings { it.copy(fullRangeMeters = _state.value.unit.toMeters(valueInUnit)) }
 

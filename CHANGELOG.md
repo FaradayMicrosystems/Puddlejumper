@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.4.2 — 2026-10-25
+
+- Your current location is added as stop 1 automatically when the app opens (after you allow location access).
+- Clear keeps your current location as stop 1.
+
 ## v0.4.1 — 2026-10-25
 
 - Search autofill: suggestions appear as you type (after 3 letters), nearest to the map view first.

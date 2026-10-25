@@ -73,6 +73,7 @@ class MainActivity : AppCompatActivity() {
     private var sliderUnit: DistanceUnit? = null
     private var zoomedRoute: Route? = null
     private var suggestJob: Job? = null
+    private var followOnGrant = true
 
     /** Shows whatever suggestions were fetched last; the server already matched them, so no local filtering. */
     private inner class SuggestionAdapter :
@@ -128,6 +129,8 @@ class MainActivity : AppCompatActivity() {
 
         setUpMap()
         setUpControls()
+        // Ask for location right away so your position becomes stop 1 without any taps.
+        onMyLocation(follow = false)
 
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
@@ -411,11 +414,12 @@ class MainActivity : AppCompatActivity() {
             .show()
     }
 
-    private fun onMyLocation() {
+    private fun onMyLocation(follow: Boolean = true) {
+        followOnGrant = follow
         val fine = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
         val coarse = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION)
         if (fine == PackageManager.PERMISSION_GRANTED || coarse == PackageManager.PERMISSION_GRANTED) {
-            startLocation()
+            startLocation(follow)
         } else {
             locationPermission.launch(
                 arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)
@@ -423,18 +427,28 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun startLocation() {
+    /**
+     * Shows your position and makes it stop 1. [follow] keeps the map centred on you (the location button);
+     * at launch the map centres once and then stays where you pan it.
+     */
+    private fun startLocation(follow: Boolean = followOnGrant) {
         val overlay = locationOverlay ?: MyLocationNewOverlay(GpsMyLocationProvider(this), map).also {
             locationOverlay = it
             map.overlays.add(it)
         }
         overlay.enableMyLocation()
-        overlay.enableFollowLocation()
-        map.controller.setZoom(12.0)
+        if (follow) {
+            overlay.enableFollowLocation()
+            map.controller.setZoom(12.0)
+        }
         overlay.runOnFirstFix {
             val fix = overlay.myLocation ?: return@runOnFirstFix
             runOnUiThread {
-                if (vm.state.value.waypoints.isEmpty()) vm.addWaypoint("My location", LatLon(fix.latitude, fix.longitude))
+                vm.setCurrentLocation(LatLon(fix.latitude, fix.longitude))
+                if (!follow) {
+                    map.controller.setZoom(11.0)
+                    map.controller.animateTo(fix)
+                }
             }
         }
     }
