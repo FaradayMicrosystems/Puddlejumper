@@ -3,6 +3,7 @@ package app.puddlejumper
 import android.Manifest
 import android.content.pm.PackageManager
 import android.graphics.Color
+import android.graphics.DashPathEffect
 import android.os.Bundle
 import android.view.HapticFeedbackConstants
 import android.view.inputmethod.EditorInfo
@@ -32,6 +33,7 @@ import app.puddlejumper.core.Geo
 import app.puddlejumper.core.LatLon
 import app.puddlejumper.core.Place
 import app.puddlejumper.core.Route
+import com.google.android.material.checkbox.MaterialCheckBox
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.floatingactionbutton.FloatingActionButton
 import com.google.android.material.materialswitch.MaterialSwitch
@@ -64,6 +66,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var rangeLabel: TextView
     private lateinit var rangeSlider: Slider
     private lateinit var chargeEachStop: MaterialSwitch
+    private lateinit var multiJump: MaterialCheckBox
     private lateinit var summary: TextView
     private lateinit var progress: ProgressBar
     private var locationOverlay: MyLocationNewOverlay? = null
@@ -124,6 +127,7 @@ class MainActivity : AppCompatActivity() {
         rangeLabel = findViewById(R.id.rangeLabel)
         rangeSlider = findViewById(R.id.rangeSlider)
         chargeEachStop = findViewById(R.id.chargeEachStop)
+        multiJump = findViewById(R.id.multiJump)
         summary = findViewById(R.id.summary)
         progress = findViewById(R.id.progress)
 
@@ -186,6 +190,7 @@ class MainActivity : AppCompatActivity() {
 
         rangeSlider.addOnChangeListener { _, value, fromUser -> if (fromUser) vm.setFullRange(value.toDouble()) }
         chargeEachStop.setOnCheckedChangeListener { _, on -> vm.setChargeAtEachStop(on) }
+        multiJump.setOnCheckedChangeListener { _, on -> vm.setMultiJumpView(on) }
 
         findViewById<Button>(R.id.routeButton).setOnClickListener { vm.computeRoute() }
         findViewById<Button>(R.id.chargersButton).setOnClickListener {
@@ -217,6 +222,7 @@ class MainActivity : AppCompatActivity() {
         if (chargeEachStop.isChecked != s.settings.chargeToFullAtEachStop) {
             chargeEachStop.isChecked = s.settings.chargeToFullAtEachStop
         }
+        if (multiJump.isChecked != s.multiJumpView) multiJump.isChecked = s.multiJumpView
         summary.text = summaryText(s)
 
         drawOverlays(s)
@@ -256,6 +262,17 @@ class MainActivity : AppCompatActivity() {
         s.waypoints.forEachIndexed { i, wp ->
             // Outer circle: how far you can go from this stop on a full charge.
             drawn += circle(wp.location, s.settings.fullRangeMeters, Color.rgb(27, 127, 90), 0x221B7F5A)
+            // Multi-jump view: dashed rings for 2 and 3 full charges (charging to full at each hop).
+            if (s.multiJumpView) {
+                for (hop in 2..3) {
+                    drawn += circle(
+                        wp.location, s.settings.fullRangeMeters * hop,
+                        stroke = if (hop == 2) Color.argb(200, 27, 127, 90) else Color.argb(140, 27, 127, 90),
+                        fill = Color.TRANSPARENT,
+                        dashed = true,
+                    )
+                }
+            }
             // Inner circle: range left when you arrive here, before charging.
             arriveAt[i]?.takeIf { it > 0 }?.let {
                 drawn += circle(wp.location, it, Color.rgb(230, 130, 0), 0x18E68200)
@@ -299,9 +316,10 @@ class MainActivity : AppCompatActivity() {
         map.invalidate()
     }
 
-    private fun circle(center: LatLon, radiusM: Double, stroke: Int, fill: Int) = Polygon(map).apply {
+    private fun circle(center: LatLon, radiusM: Double, stroke: Int, fill: Int, dashed: Boolean = false) = Polygon(map).apply {
         points = Geo.circle(center, radiusM).map { GeoPoint(it.lat, it.lon) }
         outlinePaint.color = stroke
+        if (dashed) outlinePaint.pathEffect = DashPathEffect(floatArrayOf(24f, 16f), 0f)
         outlinePaint.strokeWidth = 4f
         fillPaint.color = fill
         infoWindow = null

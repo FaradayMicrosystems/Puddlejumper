@@ -10,6 +10,7 @@ car's full-charge range, so you can see at a glance how far you can get from eac
 - **Range circles** at every stop:
   - Green circle: the distance you can drive from that stop on a full charge (set with the slider).
   - Orange circle: range left when you arrive at that stop (shown after you tap **Route**).
+- **Multi-jump view** tick box: dashed rings at 2 and 3 full charges around each stop (up to 3 hops).
 - **Route**: driving route through all stops, total distance and time, and range on arrival per leg.
   Legs that drop below your reserve are marked with ⚠.
 - **Charge to full at each stop** switch. Off means range carries over from stop to stop.

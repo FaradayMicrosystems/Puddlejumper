@@ -32,6 +32,8 @@ data class UiState(
     val chargers: List<ChargingStation> = emptyList(),
     val settings: RangeSettings,
     val unit: DistanceUnit,
+    /** Draw extra rings at 2 and 3 full charges around each stop. */
+    val multiJumpView: Boolean = false,
     val loading: Boolean = false,
     /** One-shot message for a snackbar; cleared by [MainViewModel.messageShown]. */
     val message: String? = null,
@@ -45,6 +47,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         UiState(
             settings = RangeSettings(prefs.fullRangeMeters, prefs.reservePercent, prefs.chargeAtEachStop),
             unit = prefs.unit,
+            multiJumpView = prefs.multiJumpView,
         )
     )
     val state: StateFlow<UiState> = _state
@@ -104,6 +107,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun setChargeAtEachStop(on: Boolean) = updateSettings { it.copy(chargeToFullAtEachStop = on) }
 
     fun setReservePercent(p: Int) = updateSettings { it.copy(reservePercent = p) }
+
+    fun setMultiJumpView(on: Boolean) {
+        prefs.multiJumpView = on
+        _state.update { it.copy(multiJumpView = on) }
+    }
 
     fun setUnit(unit: DistanceUnit) {
         prefs.unit = unit

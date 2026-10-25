@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.6 — 2026-10-25
+
+- "Multi-jump view" tick box (lower left): adds dashed rings at 2 and 3 full charges around each stop,
+  so you can see how far you get in up to 3 hops when charging to full at each one.
+
 ## v0.4.2 — 2026-10-25
 
 - Your current location is added as stop 1 automatically when the app opens (after you allow location access).

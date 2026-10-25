@@ -7,6 +7,7 @@
     <string name="steps">Steps</string>
     <string name="clear">Clear</string>
     <string name="my_location">My location</string>
+    <string name="multi_jump_view">Multi-jump view</string>
     <string name="charge_each_stop">Charge to full at each stop</string>
     <string name="hint_long_press">Tap and hold the map to drop a stop, or search a place.</string>
 </resources>

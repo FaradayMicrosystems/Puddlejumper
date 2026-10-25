@@ -20,6 +20,10 @@ class Prefs(context: Context) {
         get() = sp.getBoolean("chargeAtEachStop", true)
         set(v) = sp.edit().putBoolean("chargeAtEachStop", v).apply()
 
+    var multiJumpView: Boolean
+        get() = sp.getBoolean("multiJumpView", false)
+        set(v) = sp.edit().putBoolean("multiJumpView", v).apply()
+
     var unit: DistanceUnit
         // Metric by default. New key so builds that defaulted to miles don't carry that choice over.
         get() = runCatching { DistanceUnit.valueOf(sp.getString("distanceUnit", null)!!) }.getOrDefault(DistanceUnit.KILOMETERS)
