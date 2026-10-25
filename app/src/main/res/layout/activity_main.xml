@@ -23,13 +23,15 @@
             android:orientation="horizontal"
             android:paddingStart="12dp">
 
-            <EditText
+            <AutoCompleteTextView
                 android:id="@+id/search"
                 android:layout_width="0dp"
                 android:layout_height="48dp"
                 android:layout_weight="1"
                 android:background="@android:color/transparent"
                 android:hint="@string/search_hint"
+                android:completionThreshold="3"
+                android:dropDownWidth="match_parent"
                 android:imeOptions="actionSearch"
                 android:importantForAutofill="no"
                 android:inputType="text" />

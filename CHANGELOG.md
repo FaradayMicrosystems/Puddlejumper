@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.4.1 — 2026-10-25
+
+- Search autofill: suggestions appear as you type (after 3 letters), nearest to the map view first.
+  Pick one to add it as a stop. Suggestions come from Photon (OpenStreetMap data, no key).
+
 ## v0.4 — 2026-10-25
 
 - Tap and hold anywhere on the map to drop a stop, including inside range circles. The phone vibrates,

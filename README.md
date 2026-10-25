@@ -28,7 +28,8 @@ red = down or under maintenance, gray = planned, orange = in use (live sources o
 |---|---|---|
 | Map tiles | OpenStreetMap | No key. Fine for testing, not for a published app. |
 | Routing | OSRM public demo server | No key. Testing only. |
-| Search | Nominatim (OSM) | No key. Max 1 request per second. |
+| Search suggestions | Photon (OSM) | No key. |
+| Search on Enter, pin names | Nominatim (OSM) | No key. Max 1 request per second. |
 | Chargers | NREL AFDC (US and Canada) | Works with `DEMO_KEY` (low hourly limit). Free key at developer.nrel.gov. |
 | Chargers (optional) | Open Charge Map (worldwide) | Free key at openchargemap.org. |
 

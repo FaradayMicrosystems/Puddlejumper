@@ -12,6 +12,7 @@ import app.puddlejumper.core.NominatimGeocoder
 import app.puddlejumper.core.NrelSource
 import app.puddlejumper.core.OpenChargeMapSource
 import app.puddlejumper.core.OsrmRouter
+import app.puddlejumper.core.PhotonGeocoder
 import app.puddlejumper.core.Place
 import app.puddlejumper.core.RangePlanner
 import app.puddlejumper.core.RangeSettings
@@ -130,6 +131,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             if (places.isEmpty()) say("No places found for \"$query\"") else onResult(places)
         }
     }
+
+    /** Search-as-you-type suggestions, nearest to [near] first. Throws on network errors; callers ignore them. */
+    suspend fun suggest(query: String, near: LatLon?): List<Place> =
+        PhotonGeocoder.parse(Http.get(PhotonGeocoder.autocompleteUrl(query, near)))
 
     fun messageShown() = _state.update { it.copy(message = null) }
 

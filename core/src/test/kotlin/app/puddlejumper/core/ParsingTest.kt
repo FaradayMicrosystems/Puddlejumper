@@ -81,6 +81,26 @@ class ParsingTest {
         assertTrue(NominatimGeocoder.reverseUrl(LatLon(1.5, 2.5)).endsWith("&lat=1.5&lon=2.5"))
     }
 
+    @Test fun parsesPhotonSuggestions() {
+        val json = """{"type":"FeatureCollection","features":[
+            {"geometry":{"type":"Point","coordinates":[-119.78,36.73]},"properties":{"name":"Fresno","state":"California","country":"United States","osm_id":1}},
+            {"geometry":{"type":"Point","coordinates":[-119.8,36.7]},"properties":{"street":"Main Street","housenumber":"12","city":"Fresno","country":"United States"}},
+            {"geometry":{"type":"Point","coordinates":[-119.78,36.73]},"properties":{"name":"Fresno","state":"California","country":"United States"}},
+            {"geometry":{"type":"Point","coordinates":[]},"properties":{"name":"Broken"}},
+            {"geometry":{"type":"Point","coordinates":[1.0,2.0]},"properties":{}}
+        ]}"""
+        val places = PhotonGeocoder.parse(json)
+        assertEquals(
+            listOf(
+                Place("Fresno, California, United States", LatLon(36.73, -119.78)),
+                Place("Main Street 12, Fresno, United States", LatLon(36.7, -119.8)),
+            ),
+            places,
+        )
+        val url = PhotonGeocoder.autocompleteUrl("san jo", LatLon(37.0, -122.0))
+        assertTrue(url.contains("q=san+jo") && url.endsWith("&lat=37.0&lon=-122.0"), url)
+    }
+
     @Test fun parsesNominatim() {
         val places = NominatimGeocoder.parse("""[{"display_name":"Reno, NV","lat":"39.5","lon":"-119.8","x":1}]""")
         assertEquals(listOf(Place("Reno, NV", LatLon(39.5, -119.8))), places)

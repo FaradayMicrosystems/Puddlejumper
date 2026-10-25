@@ -7,7 +7,10 @@ import android.os.Bundle
 import android.view.HapticFeedbackConstants
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
+import android.widget.ArrayAdapter
+import android.widget.AutoCompleteTextView
 import android.widget.Button
+import android.widget.Filter
 import android.widget.EditText
 import android.widget.ImageButton
 import android.widget.ProgressBar
@@ -18,6 +21,7 @@ import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.core.view.isVisible
+import androidx.core.widget.doAfterTextChanged
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
@@ -33,6 +37,8 @@ import com.google.android.material.floatingactionbutton.FloatingActionButton
 import com.google.android.material.materialswitch.MaterialSwitch
 import com.google.android.material.slider.Slider
 import com.google.android.material.snackbar.Snackbar
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.osmdroid.config.Configuration
 import org.osmdroid.events.MapEventsReceiver
@@ -66,6 +72,28 @@ class MainActivity : AppCompatActivity() {
     private val drawn = mutableListOf<Overlay>()
     private var sliderUnit: DistanceUnit? = null
     private var zoomedRoute: Route? = null
+    private var suggestJob: Job? = null
+
+    /** Shows whatever suggestions were fetched last; the server already matched them, so no local filtering. */
+    private inner class SuggestionAdapter :
+        ArrayAdapter<String>(this@MainActivity, android.R.layout.simple_dropdown_item_1line) {
+        var places: List<Place> = emptyList()
+            private set
+
+        fun update(newPlaces: List<Place>) {
+            places = newPlaces
+            clear()
+            addAll(newPlaces.map { it.name })
+            notifyDataSetChanged()
+        }
+
+        override fun getFilter(): Filter = object : Filter() {
+            override fun performFiltering(constraint: CharSequence?) =
+                FilterResults().apply { count = places.size }
+
+            override fun publishResults(constraint: CharSequence?, results: FilterResults?) = notifyDataSetChanged()
+        }
+    }
 
     /** Tap and hold anywhere on the map, including inside range circles, to drop a stop. */
     private val mapEvents = MapEventsOverlay(object : MapEventsReceiver {
@@ -118,7 +146,32 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setUpControls() {
-        val search = findViewById<EditText>(R.id.search)
+        val search = findViewById<AutoCompleteTextView>(R.id.search)
+        val suggestions = SuggestionAdapter()
+        search.setAdapter(suggestions)
+        search.setOnItemClickListener { _, _, position, _ ->
+            val p = suggestions.places.getOrNull(position) ?: return@setOnItemClickListener
+            search.setText("")
+            getSystemService(InputMethodManager::class.java).hideSoftInputFromWindow(search.windowToken, 0)
+            vm.addWaypoint(p.name.substringBefore(","), p.location)
+            map.controller.animateTo(GeoPoint(p.location.lat, p.location.lon))
+        }
+        search.doAfterTextChanged { text ->
+            suggestJob?.cancel()
+            val q = text?.toString()?.trim().orEmpty()
+            if (q.length < 3) {
+                suggestions.update(emptyList())
+                return@doAfterTextChanged
+            }
+            suggestJob = lifecycleScope.launch {
+                delay(350) // wait for a pause in typing
+                val c = map.mapCenter
+                val places = runCatching { vm.suggest(q, LatLon(c.latitude, c.longitude)) }.getOrNull()
+                    ?: return@launch
+                suggestions.update(places)
+                if (search.hasFocus() && places.isNotEmpty()) search.showDropDown()
+            }
+        }
         search.setOnEditorActionListener { v, actionId, _ ->
             if (actionId != EditorInfo.IME_ACTION_SEARCH) return@setOnEditorActionListener false
             getSystemService(InputMethodManager::class.java).hideSoftInputFromWindow(v.windowToken, 0)
