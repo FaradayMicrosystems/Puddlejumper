@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.pm.PackageManager
 import android.graphics.Color
 import android.os.Bundle
+import android.view.HapticFeedbackConstants
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
 import android.widget.Button
@@ -66,6 +67,18 @@ class MainActivity : AppCompatActivity() {
     private var sliderUnit: DistanceUnit? = null
     private var zoomedRoute: Route? = null
 
+    /** Tap and hold anywhere on the map, including inside range circles, to drop a stop. */
+    private val mapEvents = MapEventsOverlay(object : MapEventsReceiver {
+        override fun singleTapConfirmedHelper(p: GeoPoint?) = false
+        override fun longPressHelper(p: GeoPoint?): Boolean {
+            p ?: return false
+            map.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+            vm.dropPin(LatLon(p.latitude, p.longitude))
+            Snackbar.make(map, "Stop ${vm.state.value.waypoints.size} added. Tap it to remove.", Snackbar.LENGTH_SHORT).show()
+            return true
+        }
+    })
+
     private val locationPermission = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { granted -> if (granted.values.any { it }) startLocation() }
@@ -101,14 +114,7 @@ class MainActivity : AppCompatActivity() {
         map.zoomController.setVisibility(CustomZoomButtonsController.Visibility.NEVER)
         map.controller.setZoom(5.0)
         map.controller.setCenter(GeoPoint(39.5, -98.35))
-        map.overlays.add(MapEventsOverlay(object : MapEventsReceiver {
-            override fun singleTapConfirmedHelper(p: GeoPoint?) = false
-            override fun longPressHelper(p: GeoPoint?): Boolean {
-                p ?: return false
-                vm.addWaypoint("Dropped pin", LatLon(p.latitude, p.longitude))
-                return true
-            }
-        }))
+        map.overlays.add(mapEvents)
     }
 
     private fun setUpControls() {
@@ -230,6 +236,10 @@ class MainActivity : AppCompatActivity() {
         }
 
         map.overlays.addAll(drawn)
+        // Keep the tap-and-hold handler on top so no circle or marker swallows the gesture.
+        // Its single-tap handler returns false, so taps still reach markers underneath.
+        map.overlays.remove(mapEvents)
+        map.overlays.add(mapEvents)
         map.invalidate()
     }
 

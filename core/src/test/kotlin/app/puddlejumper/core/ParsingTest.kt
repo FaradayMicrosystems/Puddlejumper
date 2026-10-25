@@ -68,6 +68,19 @@ class ParsingTest {
         assertFailsWith<RoutingException> { OsrmRouter().parse("""{"code":"NoRoute","message":"Impossible route"}""") }
     }
 
+    @Test fun parsesNominatimReverse() {
+        assertEquals("Rest Stop", NominatimGeocoder.parseReverse("""{"name":"Rest Stop","display_name":"x"}"""))
+        assertEquals(
+            "12 Main Street, Fresno",
+            NominatimGeocoder.parseReverse(
+                """{"name":"","display_name":"12, Main Street, Fresno","address":{"house_number":"12","road":"Main Street","city":"Fresno"}}"""
+            ),
+        )
+        assertEquals("Highway 99", NominatimGeocoder.parseReverse("""{"address":{"road":"Highway 99"}}"""))
+        assertNull(NominatimGeocoder.parseReverse("""{"error":"Unable to geocode"}"""))
+        assertTrue(NominatimGeocoder.reverseUrl(LatLon(1.5, 2.5)).endsWith("&lat=1.5&lon=2.5"))
+    }
+
     @Test fun parsesNominatim() {
         val places = NominatimGeocoder.parse("""[{"display_name":"Reno, NV","lat":"39.5","lon":"-119.8","x":1}]""")
         assertEquals(listOf(Place("Reno, NV", LatLon(39.5, -119.8))), places)

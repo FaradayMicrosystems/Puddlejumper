@@ -108,6 +108,36 @@ object NominatimGeocoder {
         "https://nominatim.openstreetmap.org/search?format=jsonv2&limit=$limit&q=" +
             java.net.URLEncoder.encode(query, "UTF-8")
 
+    fun reverseUrl(at: LatLon): String =
+        "https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=17&lat=${at.lat}&lon=${at.lon}"
+
+    /** Short label for a reverse-geocoded point, e.g. "Main Street, Fresno". Null when nothing was found. */
+    fun parseReverse(json: String): String? {
+        val r = JSON.decodeFromString<Reverse>(json)
+        r.name?.takeIf { it.isNotBlank() }?.let { return it }
+        val a = r.address ?: return r.displayName?.split(",")?.take(2)?.joinToString(",")?.trim()
+        val street = listOfNotNull(a.houseNumber, a.road).joinToString(" ").ifBlank { null }
+        val town = a.city ?: a.town ?: a.village ?: a.county
+        return listOfNotNull(street, town).joinToString(", ").ifBlank { r.displayName }
+    }
+
+    @Serializable
+    private data class Reverse(
+        val name: String? = null,
+        @SerialName("display_name") val displayName: String? = null,
+        val address: Address? = null,
+    )
+
+    @Serializable
+    private data class Address(
+        @SerialName("house_number") val houseNumber: String? = null,
+        val road: String? = null,
+        val city: String? = null,
+        val town: String? = null,
+        val village: String? = null,
+        val county: String? = null,
+    )
+
     fun parse(json: String): List<Place> =
         JSON.decodeFromString<List<Result>>(json).map { Place(it.displayName, LatLon(it.lat.toDouble(), it.lon.toDouble())) }
 

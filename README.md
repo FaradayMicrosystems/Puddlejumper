@@ -6,7 +6,7 @@ car's full-charge range, so you can see at a glance how far you can get from eac
 ## What works in this first version
 
 - OpenStreetMap map with pinch zoom and your location.
-- Add stops by long-pressing the map, searching a place, or tapping a charger and choosing **Add as stop**.
+- Add stops by tapping and holding anywhere on the map (the pin is named by its street address), searching a place, or tapping a charger and choosing **Add as stop**.
 - **Range circles** at every stop:
   - Green circle: the distance you can drive from that stop on a full charge (set with the slider).
   - Orange circle: range left when you arrive at that stop (shown after you tap **Route**).

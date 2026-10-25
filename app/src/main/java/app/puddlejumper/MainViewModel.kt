@@ -53,6 +53,19 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         it.copy(waypoints = it.waypoints + Waypoint(name, location), route = null, legs = emptyList())
     }
 
+    /** Adds a stop from a tap-and-hold on the map, then names it by its street address in the background. */
+    fun dropPin(location: LatLon) {
+        val label = "Pin %.4f, %.4f".format(location.lat, location.lon)
+        addWaypoint(label, location)
+        viewModelScope.launch {
+            val name = runCatching { NominatimGeocoder.parseReverse(Http.get(NominatimGeocoder.reverseUrl(location))) }
+                .getOrNull() ?: return@launch
+            _state.update { s ->
+                s.copy(waypoints = s.waypoints.map { if (it.location == location && it.name == label) it.copy(name = name) else it })
+            }
+        }
+    }
+
     fun removeWaypoint(index: Int) = _state.update {
         it.copy(waypoints = it.waypoints.filterIndexed { i, _ -> i != index }, route = null, legs = emptyList())
     }

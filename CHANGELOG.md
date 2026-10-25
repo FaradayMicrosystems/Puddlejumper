@@ -1,7 +1,9 @@
 # Changelog
 
-## Unreleased
+## v0.4 — 2026-10-25
 
+- Tap and hold anywhere on the map to drop a stop, including inside range circles. The phone vibrates,
+  and the stop is named by its street address once it is looked up.
 - New app icon: a ring gate with nine chevrons and a blue event horizon (adaptive icon, with a themed monochrome version).
 
 ## v0.3 — 2026-10-25
