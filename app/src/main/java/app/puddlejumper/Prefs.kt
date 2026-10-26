@@ -30,9 +30,11 @@ class Prefs(context: Context) {
         set(v) = sp.edit().putString("distanceUnit", v.name).apply()
 
     var chargerSource: ChargerSourceType
-        // Open Charge Map by default now that its key is built in. New pref name so older saved choices reset.
+        // Open Charge Map by default when the build has its key, otherwise NREL.
         get() = runCatching { ChargerSourceType.valueOf(sp.getString("chargerSource", null)!!) }
-            .getOrDefault(ChargerSourceType.OPEN_CHARGE_MAP)
+            .getOrDefault(
+                if (BuildConfig.OCM_API_KEY.isNotBlank()) ChargerSourceType.OPEN_CHARGE_MAP else ChargerSourceType.NREL
+            )
         set(v) = sp.edit().putString("chargerSource", v.name).apply()
 
     /** API keys are built into the app (see app/build.gradle.kts); there is no Settings field for them. */

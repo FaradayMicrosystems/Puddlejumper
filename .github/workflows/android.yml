@@ -31,7 +31,7 @@ jobs:
           if [ -n "$NREL_API_KEY" ]; then echo "NREL_API_KEY=$NREL_API_KEY" >> local.properties; fi
           if [ -n "$OCM_API_KEY" ]; then echo "OCM_API_KEY=$OCM_API_KEY" >> local.properties; fi
           NREL=$([ -n "$NREL_API_KEY" ] && echo "built in" || echo "not set, app uses the shared DEMO_KEY")
-          OCM=$([ -n "$OCM_API_KEY" ] && echo "from repo secret" || echo "built-in default")
+          OCM=$([ -n "$OCM_API_KEY" ] && echo "built in" || echo "not set")
           echo "KEY_STATUS=API keys in this build: NREL $NREL; Open Charge Map $OCM." >> "$GITHUB_ENV"
           echo "NREL: $NREL / OCM: $OCM"
 

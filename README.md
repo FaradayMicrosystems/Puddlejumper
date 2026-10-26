@@ -32,7 +32,7 @@ red = down or under maintenance, gray = planned, orange = in use (live sources o
 | Search suggestions | Photon (OSM) | No key. |
 | Search on Enter, pin names | Nominatim (OSM) | No key. Max 1 request per second. |
 | Chargers | NREL AFDC (US and Canada) | Works with `DEMO_KEY` (low hourly limit). Free key at developer.nrel.gov. |
-| Chargers (default) | Open Charge Map (worldwide) | Key built into the app. |
+| Chargers (default when keyed) | Open Charge Map (worldwide) | Key from the `OCM_API_KEY` secret, never in the code. |
 
 **PlugShare:** its API needs a paid commercial license; there is no personal license.
 NREL and Open Charge Map do not report live plug availability (free or occupied). For live

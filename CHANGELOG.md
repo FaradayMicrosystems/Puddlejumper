@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.6.2 — 2026-10-26
+
+- The Open Charge Map key is no longer in the source code. GitHub builds read it from the
+  `OCM_API_KEY` repository secret. Without it, the app uses NREL charger data.
+
 ## v0.6.1 — 2026-10-26
 
 - Open Charge Map key is built into the app, and Open Charge Map is now the default charger source.
