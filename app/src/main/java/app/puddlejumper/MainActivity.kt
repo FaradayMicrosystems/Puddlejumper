@@ -413,8 +413,15 @@ class MainActivity : AppCompatActivity() {
         reserve.addOnChangeListener { _, v, _ -> reserveLabel.text = "Arrival reserve: ${v.toInt()}%" }
         val nrelKey = view.findViewById<EditText>(R.id.nrelKey)
         val ocmKey = view.findViewById<EditText>(R.id.ocmKey)
-        nrelKey.setText(prefs.nrelKey.takeIf { it != "DEMO_KEY" })
-        ocmKey.setText(prefs.ocmKey)
+        // Show only keys typed here; keys built into the app stay hidden but are named in the hint.
+        nrelKey.setText(prefs.typedNrelKey)
+        ocmKey.setText(prefs.typedOcmKey)
+        nrelKey.hint = when {
+            BuildConfig.NREL_API_KEY != "DEMO_KEY" -> "NREL key: built into this app (blank = use it)"
+            else -> "NREL key (blank = shared DEMO_KEY, limited)"
+        }
+        ocmKey.hint = if (BuildConfig.OCM_API_KEY.isNotBlank()) "Open Charge Map key: built into this app (blank = use it)"
+        else "Open Charge Map key (needed for that source)"
 
         MaterialAlertDialogBuilder(this)
             .setTitle(R.string.settings)

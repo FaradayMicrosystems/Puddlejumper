@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.6.1 — 2026-10-26
+
+- Settings shows whether NREL and Open Charge Map keys are built into the app.
+- The charger message says when the shared NREL demo key is in use.
+- Release notes state which API keys each build contains. Re-running the build from the Actions tab
+  after adding key secrets replaces the APK on the current release.
+
 ## v0.6 — 2026-10-25
 
 - "Multi-jump view" tick box (lower left): adds dashed rings at 2 and 3 full charges around each stop,

@@ -154,7 +154,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 source.parse(Http.get(source.nearbyUrl(center, radiusMeters)))
             }
             _state.update { it.copy(chargers = stations) }
-            say("${stations.size} chargers from ${source.name}" + if (route != null && source is NrelSource) " along your route" else "")
+            val where = if (route != null && source is NrelSource) " along your route" else ""
+            val demo = if (source is NrelSource && prefs.nrelKey == "DEMO_KEY") " (shared demo key)" else ""
+            say("${stations.size} chargers from ${source.name}$where$demo")
         }
     }
 

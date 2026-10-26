@@ -33,6 +33,10 @@ class Prefs(context: Context) {
         get() = runCatching { ChargerSourceType.valueOf(sp.getString("source", null)!!) }.getOrDefault(ChargerSourceType.NREL)
         set(v) = sp.edit().putString("source", v.name).apply()
 
+    /** Keys typed in Settings, blank when none. */
+    val typedNrelKey: String get() = sp.getString("nrelKey", null).orEmpty()
+    val typedOcmKey: String get() = sp.getString("ocmKey", null).orEmpty()
+
     /** User-entered keys override the build-time keys from local.properties. */
     var nrelKey: String
         get() = sp.getString("nrelKey", null)?.takeIf { it.isNotBlank() } ?: BuildConfig.NREL_API_KEY

@@ -22,8 +22,8 @@ android {
         applicationId = "app.puddlejumper"
         minSdk = 26
         targetSdk = 35
-        versionCode = 7
-        versionName = "0.6"
+        versionCode = 8
+        versionName = "0.6.1"
         buildConfigField("String", "NREL_API_KEY", key("NREL_API_KEY", "DEMO_KEY"))
         buildConfigField("String", "OCM_API_KEY", key("OCM_API_KEY"))
     }

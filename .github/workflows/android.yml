@@ -30,7 +30,10 @@ jobs:
           : > local.properties
           if [ -n "$NREL_API_KEY" ]; then echo "NREL_API_KEY=$NREL_API_KEY" >> local.properties; fi
           if [ -n "$OCM_API_KEY" ]; then echo "OCM_API_KEY=$OCM_API_KEY" >> local.properties; fi
-          echo "NREL key set: $([ -n "$NREL_API_KEY" ] && echo yes || echo no), OCM key set: $([ -n "$OCM_API_KEY" ] && echo yes || echo no)"
+          NREL=$([ -n "$NREL_API_KEY" ] && echo "built in" || echo "not set, app uses the shared DEMO_KEY")
+          OCM=$([ -n "$OCM_API_KEY" ] && echo "built in" || echo "not set")
+          echo "KEY_STATUS=API keys in this build: NREL $NREL; Open Charge Map $OCM." >> "$GITHUB_ENV"
+          echo "NREL: $NREL / OCM: $OCM"
 
       - name: Unit tests
         run: ./gradlew :core:test --stacktrace
@@ -47,7 +50,7 @@ jobs:
       # Every push to main replaces the "latest" pre-release, so this link always has the newest APK:
       # https://github.com/FaradayMicrosystems/Puddlejumper/releases/download/latest/puddlejumper-debug.apk
       - name: Publish latest APK
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -55,18 +58,25 @@ jobs:
           gh release delete latest --cleanup-tag --yes || true
           gh release create latest puddlejumper-debug.apk --target "$GITHUB_SHA" --prerelease \
             --title "Latest build (${GITHUB_SHA::7})" \
-            --notes "Debug build of main. Open the .apk on an Android 8.0+ phone and allow installs from this source when asked."
+            --notes "Debug build of main. Open the .apk on an Android 8.0+ phone and allow installs from this source when asked. $KEY_STATUS"
 
-      # A versionName with no matching tag yet publishes a full release, named and noted from CHANGELOG.md.
+      # A new versionName publishes a full release, named and noted from CHANGELOG.md.
+      # Re-running for an existing version (Actions > Android build > Run workflow) replaces its APK.
       - name: Publish versioned release
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           VERSION=$(sed -n 's/.*versionName = "\(.*\)".*/\1/p' app/build.gradle.kts)
           TAG="v$VERSION"
-          if gh release view "$TAG" > /dev/null 2>&1; then echo "$TAG already released"; exit 0; fi
           awk -v h="## $TAG" 'index($0, h) == 1 {on=1; next} /^## / {on=0} on' CHANGELOG.md > notes.md
+          printf '\n%s\n' "$KEY_STATUS" >> notes.md
           cp app/build/outputs/apk/debug/app-debug.apk "puddlejumper-$TAG.apk"
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            # Rebuild of an existing version (e.g. after adding API key secrets): replace its APK.
+            gh release upload "$TAG" "puddlejumper-$TAG.apk" --clobber
+            gh release edit "$TAG" --notes-file notes.md
+            exit 0
+          fi
           gh release create "$TAG" "puddlejumper-$TAG.apk" --target "$GITHUB_SHA" --latest \
             --title "Puddlejumper $TAG" --notes-file notes.md
