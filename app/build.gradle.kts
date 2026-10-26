@@ -7,7 +7,7 @@ plugins {
 
 // Optional keys go in local.properties (not committed):
 //   NREL_API_KEY=...   (free at developer.nrel.gov; DEMO_KEY is used if missing)
-//   OCM_API_KEY=...    (free at openchargemap.org; enables the Open Charge Map source)
+//   OCM_API_KEY=...    (overrides the built-in Open Charge Map key)
 val localProps = Properties().apply {
     val f = rootProject.file("local.properties")
     if (f.exists()) f.inputStream().use { load(it) }
@@ -25,7 +25,8 @@ android {
         versionCode = 8
         versionName = "0.6.1"
         buildConfigField("String", "NREL_API_KEY", key("NREL_API_KEY", "DEMO_KEY"))
-        buildConfigField("String", "OCM_API_KEY", key("OCM_API_KEY"))
+        // Built-in Open Charge Map key. It ships inside the APK, so treat it as public.
+        buildConfigField("String", "OCM_API_KEY", key("OCM_API_KEY", "41b217e1-d0cb-4754-9d16-763dc38a3425"))
     }
 
     buildFeatures { buildConfig = true }

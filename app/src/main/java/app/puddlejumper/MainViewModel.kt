@@ -142,7 +142,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         val source: ChargerSource = when (prefs.chargerSource) {
             ChargerSourceType.NREL -> NrelSource(prefs.nrelKey)
             ChargerSourceType.OPEN_CHARGE_MAP -> {
-                if (prefs.ocmKey.isBlank()) return say("Add an Open Charge Map key in Settings first.")
+                if (prefs.ocmKey.isBlank()) return say("This build has no Open Charge Map key.")
                 OpenChargeMapSource(prefs.ocmKey)
             }
         }

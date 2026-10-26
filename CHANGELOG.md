@@ -2,10 +2,11 @@
 
 ## v0.6.1 — 2026-10-26
 
-- Settings shows whether NREL and Open Charge Map keys are built into the app.
+- Open Charge Map key is built into the app, and Open Charge Map is now the default charger source.
+- API key fields removed from Settings.
 - The charger message says when the shared NREL demo key is in use.
 - Release notes state which API keys each build contains. Re-running the build from the Actions tab
-  after adding key secrets replaces the APK on the current release.
+  replaces the APK on the current release.
 
 ## v0.6 — 2026-10-25
 

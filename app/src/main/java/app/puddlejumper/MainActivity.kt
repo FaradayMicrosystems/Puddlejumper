@@ -12,7 +12,6 @@ import android.widget.ArrayAdapter
 import android.widget.AutoCompleteTextView
 import android.widget.Button
 import android.widget.Filter
-import android.widget.EditText
 import android.widget.ImageButton
 import android.widget.ProgressBar
 import android.widget.RadioButton
@@ -411,17 +410,6 @@ class MainActivity : AppCompatActivity() {
         reserve.value = (state.settings.reservePercent / 5 * 5).toFloat().coerceIn(0f, 50f)
         reserveLabel.text = "Arrival reserve: ${reserve.value.toInt()}%"
         reserve.addOnChangeListener { _, v, _ -> reserveLabel.text = "Arrival reserve: ${v.toInt()}%" }
-        val nrelKey = view.findViewById<EditText>(R.id.nrelKey)
-        val ocmKey = view.findViewById<EditText>(R.id.ocmKey)
-        // Show only keys typed here; keys built into the app stay hidden but are named in the hint.
-        nrelKey.setText(prefs.typedNrelKey)
-        ocmKey.setText(prefs.typedOcmKey)
-        nrelKey.hint = when {
-            BuildConfig.NREL_API_KEY != "DEMO_KEY" -> "NREL key: built into this app (blank = use it)"
-            else -> "NREL key (blank = shared DEMO_KEY, limited)"
-        }
-        ocmKey.hint = if (BuildConfig.OCM_API_KEY.isNotBlank()) "Open Charge Map key: built into this app (blank = use it)"
-        else "Open Charge Map key (needed for that source)"
 
         MaterialAlertDialogBuilder(this)
             .setTitle(R.string.settings)
@@ -432,8 +420,6 @@ class MainActivity : AppCompatActivity() {
                 prefs.chargerSource =
                     if (view.findViewById<RadioButton>(R.id.sourceOcm).isChecked) ChargerSourceType.OPEN_CHARGE_MAP
                     else ChargerSourceType.NREL
-                prefs.nrelKey = nrelKey.text.toString()
-                prefs.ocmKey = ocmKey.text.toString()
             }
             .setNegativeButton("Cancel", null)
             .show()

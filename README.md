@@ -18,7 +18,7 @@ car's full-charge range, so you can see at a glance how far you can get from eac
   speed (DC fast / Level 2 / Level 1, kW where known), ports, connectors, network, status
   (operational, down / maintenance, planned), hours, pricing, and last-confirmed date.
 - **Steps**: turn-by-turn directions as a list.
-- Settings: km (default) or miles, arrival reserve %, charger data source, API keys.
+- Settings: km (default) or miles, arrival reserve %, charger data source.
 
 Marker legend: purple **F** = DC fast, blue **2** = Level 2, light blue **1** = Level 1,
 red = down or under maintenance, gray = planned, orange = in use (live sources only).
@@ -32,7 +32,7 @@ red = down or under maintenance, gray = planned, orange = in use (live sources o
 | Search suggestions | Photon (OSM) | No key. |
 | Search on Enter, pin names | Nominatim (OSM) | No key. Max 1 request per second. |
 | Chargers | NREL AFDC (US and Canada) | Works with `DEMO_KEY` (low hourly limit). Free key at developer.nrel.gov. |
-| Chargers (optional) | Open Charge Map (worldwide) | Free key at openchargemap.org. |
+| Chargers (default) | Open Charge Map (worldwide) | Key built into the app. |
 
 **PlugShare:** its API needs a paid commercial license; there is no personal license.
 NREL and Open Charge Map do not report live plug availability (free or occupied). For live
@@ -48,7 +48,6 @@ availability, add PlugShare (licensed) or TomTom EV Charging Stations Availabili
    NREL_API_KEY=your_nrel_key
    OCM_API_KEY=your_open_charge_map_key
    ```
-   You can also paste keys in the app's Settings screen.
    For the GitHub-built APK, add them as repository secrets named `NREL_API_KEY` and `OCM_API_KEY`
    (Settings > Secrets and variables > Actions). Keys built into an APK can be extracted from it,
    so use only free keys here.

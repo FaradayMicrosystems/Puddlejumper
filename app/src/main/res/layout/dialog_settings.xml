@@ -64,22 +64,8 @@
             android:id="@+id/sourceOcm"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Open Charge Map (worldwide, needs key)" />
+            android:text="Open Charge Map (worldwide)" />
     </RadioGroup>
 
-    <EditText
-        android:id="@+id/nrelKey"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:hint="NREL API key (blank = DEMO_KEY)"
-        android:importantForAutofill="no"
-        android:inputType="text" />
 
-    <EditText
-        android:id="@+id/ocmKey"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:hint="Open Charge Map API key"
-        android:importantForAutofill="no"
-        android:inputType="text" />
 </LinearLayout>

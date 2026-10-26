@@ -30,19 +30,12 @@ class Prefs(context: Context) {
         set(v) = sp.edit().putString("distanceUnit", v.name).apply()
 
     var chargerSource: ChargerSourceType
-        get() = runCatching { ChargerSourceType.valueOf(sp.getString("source", null)!!) }.getOrDefault(ChargerSourceType.NREL)
-        set(v) = sp.edit().putString("source", v.name).apply()
+        // Open Charge Map by default now that its key is built in. New pref name so older saved choices reset.
+        get() = runCatching { ChargerSourceType.valueOf(sp.getString("chargerSource", null)!!) }
+            .getOrDefault(ChargerSourceType.OPEN_CHARGE_MAP)
+        set(v) = sp.edit().putString("chargerSource", v.name).apply()
 
-    /** Keys typed in Settings, blank when none. */
-    val typedNrelKey: String get() = sp.getString("nrelKey", null).orEmpty()
-    val typedOcmKey: String get() = sp.getString("ocmKey", null).orEmpty()
-
-    /** User-entered keys override the build-time keys from local.properties. */
-    var nrelKey: String
-        get() = sp.getString("nrelKey", null)?.takeIf { it.isNotBlank() } ?: BuildConfig.NREL_API_KEY
-        set(v) = sp.edit().putString("nrelKey", v.trim()).apply()
-
-    var ocmKey: String
-        get() = sp.getString("ocmKey", null)?.takeIf { it.isNotBlank() } ?: BuildConfig.OCM_API_KEY
-        set(v) = sp.edit().putString("ocmKey", v.trim()).apply()
+    /** API keys are built into the app (see app/build.gradle.kts); there is no Settings field for them. */
+    val nrelKey: String get() = BuildConfig.NREL_API_KEY
+    val ocmKey: String get() = BuildConfig.OCM_API_KEY
 }
