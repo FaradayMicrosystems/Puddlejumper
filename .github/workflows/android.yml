@@ -35,6 +35,17 @@ jobs:
           echo "KEY_STATUS=API keys in this build: NREL $NREL; Open Charge Map $OCM." >> "$GITHUB_ENV"
           echo "NREL: $NREL / OCM: $OCM"
 
+      # Fails the build early if the Open Charge Map key is set but rejected.
+      - name: Check Open Charge Map key
+        env:
+          OCM_API_KEY: ${{ secrets.OCM_API_KEY }}
+        run: |
+          if [ -z "$OCM_API_KEY" ]; then echo "No OCM_API_KEY secret; skipping"; exit 0; fi
+          CODE=$(curl -s -o ocm.json -w '%{http_code}' -H "X-API-Key: $OCM_API_KEY" \
+            "https://api.openchargemap.io/v3/poi?output=json&maxresults=1&latitude=51.5&longitude=-0.12&distance=10&distanceunit=km&key=$OCM_API_KEY")
+          echo "Open Charge Map answered HTTP $CODE: $(head -c 200 ocm.json)"
+          [ "$CODE" = "200" ]
+
       - name: Unit tests
         run: ./gradlew :core:test --stacktrace
 
