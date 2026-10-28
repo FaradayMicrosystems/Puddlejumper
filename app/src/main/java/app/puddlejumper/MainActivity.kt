@@ -42,7 +42,11 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.osmdroid.config.Configuration
+import org.osmdroid.events.DelayedMapListener
 import org.osmdroid.events.MapEventsReceiver
+import org.osmdroid.events.MapListener
+import org.osmdroid.events.ScrollEvent
+import org.osmdroid.events.ZoomEvent
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
 import org.osmdroid.util.BoundingBox
 import org.osmdroid.util.GeoPoint
@@ -149,6 +153,11 @@ class MainActivity : AppCompatActivity() {
         map.controller.setZoom(5.0)
         map.controller.setCenter(GeoPoint(39.5, -98.35))
         map.overlays.add(mapEvents)
+        // Reload chargers for the new view once the map has stopped moving for a moment.
+        map.addMapListener(DelayedMapListener(object : MapListener {
+            override fun onScroll(event: ScrollEvent?): Boolean = refreshChargers()
+            override fun onZoom(event: ZoomEvent?): Boolean = refreshChargers()
+        }, 700))
     }
 
     private fun setUpControls() {
@@ -193,13 +202,7 @@ class MainActivity : AppCompatActivity() {
 
         findViewById<Button>(R.id.routeButton).setOnClickListener { vm.computeRoute() }
         findViewById<Button>(R.id.chargersButton).setOnClickListener {
-            val c = map.mapCenter
-            val box = map.boundingBox
-            // Half the visible diagonal, capped so a zoomed-out map doesn't request a whole continent.
-            val radius = (Geo.distanceMeters(
-                LatLon(box.latNorth, box.lonWest), LatLon(box.latSouth, box.lonEast)
-            ) / 2).coerceIn(2_000.0, 80_000.0)
-            vm.loadChargers(LatLon(c.latitude, c.longitude), radius)
+            vm.loadChargers(viewCenter(), viewRadius())
         }
         findViewById<Button>(R.id.stepsButton).setOnClickListener { showSteps() }
         findViewById<Button>(R.id.clearButton).setOnClickListener { vm.clear() }
@@ -462,6 +465,20 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         }
+    }
+
+    private fun refreshChargers(): Boolean {
+        vm.refreshChargersForView(viewCenter(), viewRadius())
+        return false
+    }
+
+    private fun viewCenter() = map.mapCenter.let { LatLon(it.latitude, it.longitude) }
+
+    /** Half the visible diagonal, capped so a zoomed-out map doesn't request a whole continent. */
+    private fun viewRadius(): Double {
+        val box = map.boundingBox
+        return (Geo.distanceMeters(LatLon(box.latNorth, box.lonWest), LatLon(box.latSouth, box.lonEast)) / 2)
+            .coerceIn(2_000.0, 250_000.0)
     }
 
     /** Fits the map to a newly planned route. */

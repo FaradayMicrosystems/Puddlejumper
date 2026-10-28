@@ -18,6 +18,7 @@ import app.puddlejumper.core.RangePlanner
 import app.puddlejumper.core.RangeSettings
 import app.puddlejumper.core.Route
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
@@ -34,6 +35,8 @@ data class UiState(
     val unit: DistanceUnit,
     /** Draw extra rings at 2 and 3 full charges around each stop. */
     val multiJumpView: Boolean = false,
+    /** True once the user has tapped Chargers; the map then reloads chargers as it moves. */
+    val chargersOn: Boolean = false,
     val loading: Boolean = false,
     /** One-shot message for a snackbar; cleared by [MainViewModel.messageShown]. */
     val message: String? = null,
@@ -99,6 +102,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             route = null,
             legs = emptyList(),
             chargers = emptyList(),
+            chargersOn = false,
         )
     }
 
@@ -138,20 +142,46 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** Loads chargers along the route when there is one (NREL), otherwise around [center]. */
-    fun loadChargers(center: LatLon, radiusMeters: Double) {
-        val source: ChargerSource = when (prefs.chargerSource) {
-            ChargerSourceType.NREL -> NrelSource(prefs.nrelKey)
-            ChargerSourceType.OPEN_CHARGE_MAP -> {
-                if (prefs.ocmKey.isBlank()) return say("This build has no Open Charge Map key.")
-                OpenChargeMapSource(prefs.ocmKey)
+    private fun chargerSource(): ChargerSource? = when (prefs.chargerSource) {
+        ChargerSourceType.NREL -> NrelSource(prefs.nrelKey)
+        ChargerSourceType.OPEN_CHARGE_MAP -> prefs.ocmKey.takeIf { it.isNotBlank() }?.let { OpenChargeMapSource(it) }
+    }
+
+    private var refreshJob: Job? = null
+
+    /**
+     * Quietly loads chargers for the visible map after a pan or zoom, adding them to those already shown.
+     * Does nothing until the user has turned chargers on with the Chargers button.
+     */
+    fun refreshChargersForView(center: LatLon, radiusMeters: Double) {
+        if (!_state.value.chargersOn) return
+        val source = chargerSource() ?: return
+        refreshJob?.cancel()
+        refreshJob = viewModelScope.launch {
+            val found = try {
+                source.parse(Http.get(source.nearbyUrl(center, radiusMeters, limit = MAX_PER_REQUEST)))
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                return@launch // a failed background refresh keeps what is already on the map
+            }
+            _state.update { s ->
+                val merged = (found + s.chargers).distinctBy { it.id }
+                // Keep the newest results when the map has collected a lot of markers.
+                s.copy(chargers = merged.take(MAX_SHOWN))
             }
         }
+    }
+
+    fun loadChargers(center: LatLon, radiusMeters: Double) {
+        val source = chargerSource() ?: return say("This build has no Open Charge Map key.")
         val route = _state.value.route
+        _state.update { it.copy(chargersOn = true) }
         launchLoading {
             val stations = if (source is NrelSource && route != null) {
                 source.parse(Http.postForm(source.nearbyRouteUrl, source.routeForm(route.geometry, CORRIDOR_M)))
             } else {
-                source.parse(Http.get(source.nearbyUrl(center, radiusMeters)))
+                source.parse(Http.get(source.nearbyUrl(center, radiusMeters, limit = MAX_PER_REQUEST)))
             }
             _state.update { it.copy(chargers = stations) }
             val where = if (route != null && source is NrelSource) " along your route" else ""
@@ -194,5 +224,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     companion object {
         /** Chargers within 8 km of the route line. */
         const val CORRIDOR_M = 8_000.0
+        const val MAX_PER_REQUEST = 500
+        const val MAX_SHOWN = 1_500
     }
 }

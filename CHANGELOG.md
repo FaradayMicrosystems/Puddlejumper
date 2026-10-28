@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.6.3 — 2026-10-28
+
+- Chargers refresh by themselves: after you tap Chargers once, panning or zooming the map loads
+  chargers for the new view (up to 250 km around the centre). Clear turns this off.
+
 ## v0.6.2 — 2026-10-26
 
 - The Open Charge Map key is no longer in the source code. GitHub builds read it from the
