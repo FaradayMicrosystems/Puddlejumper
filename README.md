@@ -30,6 +30,7 @@ red = down or under maintenance, gray = planned, orange = in use (live sources o
 | Map tiles | OpenStreetMap | No key. Fine for testing, not for a published app. |
 | Routing | OSRM public demo server | No key. Testing only. |
 | Search suggestions | Photon (OSM) | No key. |
+| Weather (3-day forecast) | Open-Meteo | No key. Metric (°C, mm, km/h). |
 | Search on Enter, pin names | Nominatim (OSM) | No key. Max 1 request per second. |
 | Chargers | NREL AFDC (US and Canada) | Works with `DEMO_KEY` (low hourly limit). Free key at developer.nrel.gov. |
 | Chargers (default when keyed) | Open Charge Map (worldwide) | Key from the `OCM_API_KEY` secret, never in the code. |

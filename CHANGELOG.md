@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.6.4 — 2026-10-28
+
+- Weather layer: tick "Weather (3 days)" (lower left). A badge with today's conditions and high/low °C
+  appears at the map centre and above every stop. Tap a badge for the 3-day forecast: conditions,
+  °C, rain in mm with chance, and maximum wind in km/h. The centre badge follows the map as you pan.
+- Forecasts come from Open-Meteo (free, no key needed).
 ## v0.6.3 — 2026-10-28
 
 - Chargers refresh by themselves: after you tap Chargers once, panning or zooming the map loads

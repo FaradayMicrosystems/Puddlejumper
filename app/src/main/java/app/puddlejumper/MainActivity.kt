@@ -28,10 +28,12 @@ import androidx.lifecycle.repeatOnLifecycle
 import app.puddlejumper.core.ChargerStatus
 import app.puddlejumper.core.ChargingStation
 import app.puddlejumper.core.DistanceUnit
+import app.puddlejumper.core.Forecast
 import app.puddlejumper.core.Geo
 import app.puddlejumper.core.LatLon
 import app.puddlejumper.core.Place
 import app.puddlejumper.core.Route
+import app.puddlejumper.core.WeatherFormat
 import com.google.android.material.checkbox.MaterialCheckBox
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.floatingactionbutton.FloatingActionButton
@@ -70,6 +72,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var rangeSlider: Slider
     private lateinit var chargeEachStop: MaterialSwitch
     private lateinit var multiJump: MaterialCheckBox
+    private lateinit var weatherLayer: MaterialCheckBox
     private lateinit var summary: TextView
     private lateinit var progress: ProgressBar
     private var locationOverlay: MyLocationNewOverlay? = null
@@ -131,11 +134,13 @@ class MainActivity : AppCompatActivity() {
         rangeSlider = findViewById(R.id.rangeSlider)
         chargeEachStop = findViewById(R.id.chargeEachStop)
         multiJump = findViewById(R.id.multiJump)
+        weatherLayer = findViewById(R.id.weatherLayer)
         summary = findViewById(R.id.summary)
         progress = findViewById(R.id.progress)
 
         setUpMap()
         setUpControls()
+        vm.setWeatherCenter(viewCenter())
         // Ask for location right away so your position becomes stop 1 without any taps.
         onMyLocation(follow = false)
 
@@ -153,10 +158,10 @@ class MainActivity : AppCompatActivity() {
         map.controller.setZoom(5.0)
         map.controller.setCenter(GeoPoint(39.5, -98.35))
         map.overlays.add(mapEvents)
-        // Reload chargers for the new view once the map has stopped moving for a moment.
+        // Reload chargers and weather for the new view once the map has stopped moving for a moment.
         map.addMapListener(DelayedMapListener(object : MapListener {
-            override fun onScroll(event: ScrollEvent?): Boolean = refreshChargers()
-            override fun onZoom(event: ZoomEvent?): Boolean = refreshChargers()
+            override fun onScroll(event: ScrollEvent?): Boolean = refreshLayers()
+            override fun onZoom(event: ZoomEvent?): Boolean = refreshLayers()
         }, 700))
     }
 
@@ -199,6 +204,10 @@ class MainActivity : AppCompatActivity() {
         rangeSlider.addOnChangeListener { _, value, fromUser -> if (fromUser) vm.setFullRange(value.toDouble()) }
         chargeEachStop.setOnCheckedChangeListener { _, on -> vm.setChargeAtEachStop(on) }
         multiJump.setOnCheckedChangeListener { _, on -> vm.setMultiJumpView(on) }
+        weatherLayer.setOnCheckedChangeListener { _, on ->
+            vm.setWeatherCenter(viewCenter())
+            vm.setWeatherOn(on)
+        }
 
         findViewById<Button>(R.id.routeButton).setOnClickListener { vm.computeRoute() }
         findViewById<Button>(R.id.chargersButton).setOnClickListener {
@@ -225,6 +234,7 @@ class MainActivity : AppCompatActivity() {
             chargeEachStop.isChecked = s.settings.chargeToFullAtEachStop
         }
         if (multiJump.isChecked != s.multiJumpView) multiJump.isChecked = s.multiJumpView
+        if (weatherLayer.isChecked != s.weatherOn) weatherLayer.isChecked = s.weatherOn
         summary.text = summaryText(s)
 
         drawOverlays(s)
@@ -300,6 +310,12 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        // Weather: today's badge above each stop and at the map centre; tap for 3 days.
+        s.waypoints.forEachIndexed { i, wp ->
+            s.stopForecasts[wp.location]?.let { weatherMarker(it, "Stop ${i + 1}: ${wp.name}", above = true)?.let { m -> drawn += m } }
+        }
+        s.centerForecast?.let { weatherMarker(it, "Map centre", above = false)?.let { m -> drawn += m } }
+
         s.waypoints.forEachIndexed { i, wp ->
             drawn += Marker(map).apply {
                 position = GeoPoint(wp.location.lat, wp.location.lon)
@@ -316,6 +332,25 @@ class MainActivity : AppCompatActivity() {
         map.overlays.remove(mapEvents)
         map.overlays.add(mapEvents)
         map.invalidate()
+    }
+
+    private fun weatherMarker(f: Forecast, title: String, above: Boolean): Marker? {
+        val today = f.days.firstOrNull() ?: return null
+        return Marker(map).apply {
+            position = GeoPoint(f.location.lat, f.location.lon)
+            icon = Icons.pill(resources, WeatherFormat.badge(today))
+            // Above a stop it sits clear of the stop's numbered dot.
+            setAnchor(Marker.ANCHOR_CENTER, if (above) 2.2f else Marker.ANCHOR_CENTER)
+            setOnMarkerClickListener { _, _ -> showForecast(title, f); true }
+        }
+    }
+
+    private fun showForecast(title: String, f: Forecast) {
+        MaterialAlertDialogBuilder(this)
+            .setTitle("Weather: $title")
+            .setMessage(f.days.joinToString("\n\n") { WeatherFormat.detail(it) } + "\n\nForecast: Open-Meteo")
+            .setPositiveButton("Close", null)
+            .show()
     }
 
     private fun circle(center: LatLon, radiusM: Double, stroke: Int, fill: Int, dashed: Boolean = false) = Polygon(map).apply {
@@ -467,8 +502,9 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun refreshChargers(): Boolean {
+    private fun refreshLayers(): Boolean {
         vm.refreshChargersForView(viewCenter(), viewRadius())
+        vm.setWeatherCenter(viewCenter())
         return false
     }
 

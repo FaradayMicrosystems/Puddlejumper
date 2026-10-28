@@ -6,10 +6,12 @@ import androidx.lifecycle.viewModelScope
 import app.puddlejumper.core.ChargerSource
 import app.puddlejumper.core.ChargingStation
 import app.puddlejumper.core.DistanceUnit
+import app.puddlejumper.core.Forecast
 import app.puddlejumper.core.LatLon
 import app.puddlejumper.core.LegReport
 import app.puddlejumper.core.NominatimGeocoder
 import app.puddlejumper.core.NrelSource
+import app.puddlejumper.core.OpenMeteo
 import app.puddlejumper.core.OpenChargeMapSource
 import app.puddlejumper.core.OsrmRouter
 import app.puddlejumper.core.PhotonGeocoder
@@ -19,8 +21,12 @@ import app.puddlejumper.core.RangeSettings
 import app.puddlejumper.core.Route
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -37,6 +43,12 @@ data class UiState(
     val multiJumpView: Boolean = false,
     /** True once the user has tapped Chargers; the map then reloads chargers as it moves. */
     val chargersOn: Boolean = false,
+    /** Weather layer: 3-day forecasts at the map centre and at every stop. */
+    val weatherOn: Boolean = false,
+    /** Forecast at the map centre, once loaded. */
+    val centerForecast: Forecast? = null,
+    /** Forecasts at stops, keyed by the stop's position. */
+    val stopForecasts: Map<LatLon, Forecast> = emptyMap(),
     val loading: Boolean = false,
     /** One-shot message for a snackbar; cleared by [MainViewModel.messageShown]. */
     val message: String? = null,
@@ -51,6 +63,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             settings = RangeSettings(prefs.fullRangeMeters, prefs.reservePercent, prefs.chargeAtEachStop),
             unit = prefs.unit,
             multiJumpView = prefs.multiJumpView,
+            weatherOn = prefs.weatherOn,
         )
     )
     val state: StateFlow<UiState> = _state
@@ -115,6 +128,60 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun setMultiJumpView(on: Boolean) {
         prefs.multiJumpView = on
         _state.update { it.copy(multiJumpView = on) }
+    }
+
+    fun setWeatherOn(on: Boolean) {
+        prefs.weatherOn = on
+        _state.update { if (on) it.copy(weatherOn = true) else it.copy(weatherOn = false, centerForecast = null, stopForecasts = emptyMap()) }
+    }
+
+    /** Map centre for the weather layer; set after every pan or zoom. */
+    private var weatherCenter: LatLon? = null
+
+    fun setWeatherCenter(center: LatLon) {
+        weatherCenter = center
+        if (_state.value.weatherOn) refreshWeather()
+    }
+
+    /** Forecasts by rounded position (about 10 km, near the forecast models' grid), with the time they were fetched. */
+    private val forecastCache = HashMap<String, Pair<Long, Forecast>>()
+    private var weatherJob: Job? = null
+
+    private fun cacheKey(p: LatLon) = "%.1f,%.1f".format(java.util.Locale.ROOT, p.lat, p.lon)
+
+    /** Loads forecasts for the map centre and every stop. Failures are skipped; the layer shows what loaded. */
+    private fun refreshWeather() {
+        val center = weatherCenter
+        val stops = _state.value.waypoints.map { it.location }
+        val points = listOfNotNull(center) + stops
+        weatherJob?.cancel()
+        weatherJob = viewModelScope.launch {
+            val now = System.currentTimeMillis()
+            forecastCache.values.removeAll { now - it.first > FORECAST_MAX_AGE_MS }
+            points.filter { cacheKey(it) !in forecastCache }
+                .distinctBy(::cacheKey)
+                .map { p -> async { p to runCatching { OpenMeteo.parse(Http.get(OpenMeteo.forecastUrl(p)), p) }.getOrNull() } }
+                .awaitAll()
+                .forEach { (p, f) -> if (f != null) forecastCache[cacheKey(p)] = now to f }
+            if (!_state.value.weatherOn) return@launch
+            fun at(p: LatLon) = forecastCache[cacheKey(p)]?.second?.copy(location = p)
+            _state.update {
+                it.copy(
+                    centerForecast = center?.let(::at),
+                    stopForecasts = stops.mapNotNull { p -> at(p)?.let { f -> p to f } }.toMap(),
+                )
+            }
+        }
+    }
+
+    // Declared after the weather fields it uses, so they exist when it first runs.
+    init {
+        // Stops added, removed or moved: fetch weather for them too.
+        viewModelScope.launch {
+            _state.map { it.weatherOn to it.waypoints.map { w -> w.location } }
+                .distinctUntilChanged()
+                .collect { (on, _) -> if (on) refreshWeather() }
+        }
     }
 
     fun setUnit(unit: DistanceUnit) {
@@ -226,5 +293,6 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         const val CORRIDOR_M = 8_000.0
         const val MAX_PER_REQUEST = 500
         const val MAX_SHOWN = 1_500
+        const val FORECAST_MAX_AGE_MS = 60 * 60 * 1000L
     }
 }
