@@ -43,7 +43,7 @@ data class UiState(
     val multiJumpView: Boolean = false,
     /** True once the user has tapped Chargers; the map then reloads chargers as it moves. */
     val chargersOn: Boolean = false,
-    /** Weather layer: 3-day forecasts at the map centre and at every stop. */
+    /** Weather layer: forecasts at the map centre and at every stop. */
     val weatherOn: Boolean = false,
     /** Forecast at the map centre, once loaded. */
     val centerForecast: Forecast? = null,

@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.6.5 — 2026-10-28
+
+- Weather badges now show 3 days in short form (symbol and high/low °C for each day).
+- Tapping a badge shows the full 5-day forecast.
+- The tick box is now called "Weather".
+
 ## v0.6.4 — 2026-10-28
 
 - Weather layer: tick "Weather (3 days)" (lower left). A badge with today's conditions and high/low °C

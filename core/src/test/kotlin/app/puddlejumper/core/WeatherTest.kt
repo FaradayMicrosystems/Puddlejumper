@@ -12,7 +12,7 @@ class WeatherTest {
         val at = LatLon(52.52, 13.41)
         val f = OpenMeteo.parse(res("openmeteo.json"), at)
         assertEquals(at, f.location)
-        assertEquals(listOf("2026-10-29", "2026-10-30", "2026-10-31"), f.days.map { it.date })
+        assertEquals(listOf("2026-10-29", "2026-10-30", "2026-10-31", "2026-11-01", "2026-11-02"), f.days.map { it.date })
         val wet = f.days[1]
         assertEquals(WeatherCondition.RAIN, wet.condition)
         assertEquals(9.8, wet.maxC)
@@ -26,10 +26,10 @@ class WeatherTest {
         assertNull(missing.maxC)
     }
 
-    @Test fun forecastUrlIsMetricAndThreeDays() {
+    @Test fun forecastUrlIsMetricAndFiveDays() {
         val url = OpenMeteo.forecastUrl(LatLon(52.52, 13.41))
         assertTrue(url.startsWith("https://api.open-meteo.com/v1/forecast?latitude=52.5200&longitude=13.4100"), url)
-        assertTrue(url.contains("&forecast_days=3"), url)
+        assertTrue(url.contains("&forecast_days=5"), url)
         // Metric is Open-Meteo's default, so no unit overrides may be sent.
         assertTrue("fahrenheit" !in url && "mph" !in url && "inch" !in url, url)
     }
@@ -49,5 +49,8 @@ class WeatherTest {
         assertEquals("Fri 30 Oct: Rain, 3 to 10 °C, 7.6 mm (85%), wind up to 32 km/h", WeatherFormat.detail(d[1]))
         assertEquals("? –/–", WeatherFormat.badge(d[2]))
         assertEquals("Sat 31 Oct: Unknown", WeatherFormat.detail(d[2]))
+        // Map badge: first 3 of the 5 days.
+        assertEquals("☁ 12°/5°  ·  🌧 10°/3°  ·  ? –/–", WeatherFormat.badge(d))
+        assertEquals("Mon 2 Nov: Snow, -3 to 2 °C, 4.0 mm (70%), wind up to 20 km/h", WeatherFormat.detail(d[4]))
     }
 }

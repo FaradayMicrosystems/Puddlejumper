@@ -310,7 +310,7 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        // Weather: today's badge above each stop and at the map centre; tap for 3 days.
+        // Weather: 3-day badge above each stop and at the map centre; tap for 5 days.
         s.waypoints.forEachIndexed { i, wp ->
             s.stopForecasts[wp.location]?.let { weatherMarker(it, "Stop ${i + 1}: ${wp.name}", above = true)?.let { m -> drawn += m } }
         }
@@ -335,10 +335,10 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun weatherMarker(f: Forecast, title: String, above: Boolean): Marker? {
-        val today = f.days.firstOrNull() ?: return null
+        if (f.days.isEmpty()) return null
         return Marker(map).apply {
             position = GeoPoint(f.location.lat, f.location.lon)
-            icon = Icons.pill(resources, WeatherFormat.badge(today))
+            icon = Icons.pill(resources, WeatherFormat.badge(f.days))
             // Above a stop it sits clear of the stop's numbered dot.
             setAnchor(Marker.ANCHOR_CENTER, if (above) 2.2f else Marker.ANCHOR_CENTER)
             setOnMarkerClickListener { _, _ -> showForecast(title, f); true }
@@ -347,7 +347,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun showForecast(title: String, f: Forecast) {
         MaterialAlertDialogBuilder(this)
-            .setTitle("Weather: $title")
+            .setTitle("5-day weather: $title")
             .setMessage(f.days.joinToString("\n\n") { WeatherFormat.detail(it) } + "\n\nForecast: Open-Meteo")
             .setPositiveButton("Close", null)
             .show()

@@ -51,7 +51,11 @@ enum class WeatherCondition(val label: String, val symbol: String) {
  * Its default units are already metric (°C, mm, km/h).
  */
 object OpenMeteo {
-    const val DAYS = 3
+    /** Days fetched and shown when a badge is tapped. */
+    const val DAYS = 5
+
+    /** Days shown on a map badge. */
+    const val BADGE_DAYS = 3
 
     fun forecastUrl(at: LatLon, days: Int = DAYS): String =
         "https://api.open-meteo.com/v1/forecast?latitude=%.4f&longitude=%.4f".format(java.util.Locale.ROOT, at.lat, at.lon) +
@@ -100,9 +104,13 @@ object WeatherFormat {
     fun day(d: DailyForecast): String =
         runCatching { java.time.LocalDate.parse(d.date).format(DAY) }.getOrDefault(d.date)
 
-    /** Short marker label, e.g. "☁ 12°/5°". */
+    /** One day in short form, e.g. "☁ 12°/5°". */
     fun badge(d: DailyForecast): String =
         "${d.condition.symbol} ${deg(d.maxC)}/${deg(d.minC)}"
+
+    /** Map badge: the first [OpenMeteo.BADGE_DAYS] days in short form, e.g. "☁ 12°/5° · 🌧 10°/3° · ☀ 14°/6°". */
+    fun badge(days: List<DailyForecast>): String =
+        days.take(OpenMeteo.BADGE_DAYS).joinToString("  ·  ") { badge(it) }
 
     /** e.g. "Thu 29 Oct: Rain, 3 to 10 °C, 7.6 mm (85%), wind up to 32 km/h". */
     fun detail(d: DailyForecast): String = buildString {
