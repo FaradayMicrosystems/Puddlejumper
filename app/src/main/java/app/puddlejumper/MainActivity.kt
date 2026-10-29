@@ -144,6 +144,8 @@ class MainActivity : AppCompatActivity() {
         vm.setWeatherCenter(viewCenter())
         // Ask for location right away so your position becomes stop 1 without any taps.
         onMyLocation(follow = false)
+        updater = Updater(this, map)
+        if (savedInstanceState == null) updater.checkInBackground()
 
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
@@ -200,8 +202,6 @@ class MainActivity : AppCompatActivity() {
             true
         }
         findViewById<ImageButton>(R.id.settings).setOnClickListener { showSettings() }
-        updater = Updater(this, map)
-        if (savedInstanceState == null) updater.checkInBackground()
         findViewById<FloatingActionButton>(R.id.myLocation).setOnClickListener { onMyLocation() }
 
         rangeSlider.addOnChangeListener { _, value, fromUser -> if (fromUser) vm.setFullRange(value.toDouble()) }
