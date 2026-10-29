@@ -83,6 +83,7 @@ class MainActivity : AppCompatActivity() {
     private var zoomedRoute: Route? = null
     private var suggestJob: Job? = null
     private var followOnGrant = true
+    private lateinit var updater: Updater
 
     /** Shows whatever suggestions were fetched last; the server already matched them, so no local filtering. */
     private inner class SuggestionAdapter :
@@ -199,6 +200,8 @@ class MainActivity : AppCompatActivity() {
             true
         }
         findViewById<ImageButton>(R.id.settings).setOnClickListener { showSettings() }
+        updater = Updater(this, map)
+        if (savedInstanceState == null) updater.checkInBackground()
         findViewById<FloatingActionButton>(R.id.myLocation).setOnClickListener { onMyLocation() }
 
         rangeSlider.addOnChangeListener { _, value, fromUser -> if (fromUser) vm.setFullRange(value.toDouble()) }
@@ -448,8 +451,9 @@ class MainActivity : AppCompatActivity() {
         reserve.value = (state.settings.reservePercent / 5 * 5).toFloat().coerceIn(0f, 50f)
         reserveLabel.text = "Arrival reserve: ${reserve.value.toInt()}%"
         reserve.addOnChangeListener { _, v, _ -> reserveLabel.text = "Arrival reserve: ${v.toInt()}%" }
+        view.findViewById<TextView>(R.id.versionLabel).text = "Installed: v${BuildConfig.VERSION_NAME}"
 
-        MaterialAlertDialogBuilder(this)
+        val dialog = MaterialAlertDialogBuilder(this)
             .setTitle(R.string.settings)
             .setView(view)
             .setPositiveButton("Save") { _, _ ->
@@ -461,6 +465,10 @@ class MainActivity : AppCompatActivity() {
             }
             .setNegativeButton("Cancel", null)
             .show()
+        view.findViewById<Button>(R.id.checkUpdates).setOnClickListener {
+            dialog.dismiss()
+            updater.checkNow()
+        }
     }
 
     private fun onMyLocation(follow: Boolean = true) {

@@ -22,16 +22,34 @@ android {
         applicationId = "app.puddlejumper"
         minSdk = 26
         targetSdk = 35
-        versionCode = 12
-        versionName = "0.6.5"
+        versionCode = 13
+        versionName = "0.6.6"
         buildConfigField("String", "NREL_API_KEY", key("NREL_API_KEY", "DEMO_KEY"))
         // Never commit keys here: they come from local.properties or the CI secret.
         buildConfigField("String", "OCM_API_KEY", key("OCM_API_KEY"))
+        // In-app updates look for newer versioned releases here.
+        buildConfigField("String", "UPDATE_REPO", "\"FaradayMicrosystems/Puddlejumper\"")
+    }
+
+    // Fixed key from GitHub secrets so each build installs over the last one
+    // (Android refuses updates signed with a different key; uninstalling deletes settings).
+    val ksFile = System.getenv("PUDDLEJUMPER_KEYSTORE_FILE")?.let { file(it) }?.takeIf { it.exists() }
+    signingConfigs {
+        if (ksFile != null) create("puddlejumper") {
+            storeFile = ksFile
+            storeType = "pkcs12"
+            storePassword = System.getenv("PUDDLEJUMPER_KEY_PASSWORD")
+            keyAlias = "puddlejumper"
+            keyPassword = System.getenv("PUDDLEJUMPER_KEY_PASSWORD")
+        }
     }
 
     buildFeatures { buildConfig = true }
 
     buildTypes {
+        debug {
+            if (ksFile != null) signingConfig = signingConfigs.getByName("puddlejumper")
+        }
         release {
             isMinifyEnabled = false
         }
