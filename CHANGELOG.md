@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.6.6 — 2026-10-29
+
+- In-app updates: when a newer version is released, a bar at the bottom offers **Update**.
+  Settings also has **Check for updates**. Puddlejumper downloads the new APK and Android installs
+  it over the current app, keeping your settings. Android asks once to allow Puddlejumper to install apps.
+- Every build is now signed with one fixed key, so new versions install over old ones.
+- One-time step: uninstall your current Puddlejumper before installing v0.6.6 (older builds used a
+  different key). From v0.6.6 on, updates install directly.
+
 ## v0.6.5 — 2026-10-28
 
 - Weather badges now show 3 days in short form (symbol and high/low °C for each day).

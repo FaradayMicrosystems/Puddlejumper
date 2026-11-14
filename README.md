@@ -63,6 +63,17 @@ and `./gradlew :core:test` for the unit tests.
 - Versioned releases: raise `versionName` in `app/build.gradle.kts`, add a `## vX.Y` section to
   `CHANGELOG.md`, and push to main. The build publishes "Puddlejumper vX.Y" with the APK.
 
+## In-app updates
+
+At launch the app checks the versioned GitHub releases. If one is newer than the installed version,
+a bar offers **Update** (also in Settings > **Check for updates**). The app downloads the APK and
+Android installs it over the current app, so settings are kept. The "latest" pre-release is not offered.
+
+This needs every build signed with the same key. The key lives in two repository secrets,
+`PUDDLEJUMPER_KEYSTORE_B64` (base64 of a PKCS12 keystore with alias `puddlejumper`) and
+`PUDDLEJUMPER_KEY_PASSWORD`. Without them the build still works, but cannot install over an
+existing copy. Keep a backup of the key: if it is lost, every phone must uninstall once to move to a new key.
+
 ## Project layout
 
 - `core/` — plain Kotlin, no Android: range math, geodesic circles, route and charger parsing. Unit-tested.

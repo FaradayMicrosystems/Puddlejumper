@@ -46,6 +46,36 @@ jobs:
           echo "Open Charge Map answered HTTP $CODE: $(head -c 200 ocm.json)"
           [ "$CODE" = "200" ]
 
+      # Fixed signing key, so every APK installs over the previous one (in-app updates need this).
+      # Without the secrets the build still works, but is signed with a random key.
+      - name: Load signing key
+        env:
+          KS: ${{ secrets.PUDDLEJUMPER_KEYSTORE_B64 }}
+          PW: ${{ secrets.PUDDLEJUMPER_KEY_PASSWORD }}
+        run: |
+          if [ -z "$KS" ]; then
+            echo "::warning::PUDDLEJUMPER_KEYSTORE_B64 secret not set - build uses a random key and cannot update over the installed app."
+            echo "SIGN_STATUS=Signing: random key (cannot update over an installed copy)." >> "$GITHUB_ENV"
+            exit 0
+          fi
+          # Tolerate spaces/line breaks picked up when pasting.
+          printf '%s' "$KS" | tr -d ' \r\n\t' > "$RUNNER_TEMP/ks.b64"
+          echo "PUDDLEJUMPER_KEYSTORE_B64 received $(wc -c < "$RUNNER_TEMP/ks.b64") characters (expected about 1388), starts with $(head -c 4 "$RUNNER_TEMP/ks.b64") (expected MIIE)"
+          if ! base64 -d "$RUNNER_TEMP/ks.b64" > "$RUNNER_TEMP/puddlejumper.p12" 2>/dev/null; then
+            echo "::error::PUDDLEJUMPER_KEYSTORE_B64 is not valid base64 - paste the key again."
+            exit 1
+          fi
+          PWC=$(printf '%s' "$PW" | tr -d ' \r\n\t')
+          echo "::add-mask::$PWC"
+          if ! keytool -list -keystore "$RUNNER_TEMP/puddlejumper.p12" -storepass "$PWC" -alias puddlejumper > /dev/null 2>&1; then
+            echo "::error::Key and password don't match - paste PUDDLEJUMPER_KEY_PASSWORD again and check PUDDLEJUMPER_KEYSTORE_B64."
+            exit 1
+          fi
+          echo "PUDDLEJUMPER_KEYSTORE_FILE=$RUNNER_TEMP/puddlejumper.p12" >> "$GITHUB_ENV"
+          echo "PUDDLEJUMPER_KEY_PASSWORD=$PWC" >> "$GITHUB_ENV"
+          echo "SIGN_STATUS=Signing: fixed Puddlejumper key (installs over v0.6.6 and later)." >> "$GITHUB_ENV"
+          echo "Signing key loaded."
+
       - name: Unit tests
         run: ./gradlew :core:test --stacktrace
 
@@ -69,7 +99,7 @@ jobs:
           gh release delete latest --cleanup-tag --yes || true
           gh release create latest puddlejumper-debug.apk --target "$GITHUB_SHA" --prerelease \
             --title "Latest build (${GITHUB_SHA::7})" \
-            --notes "Debug build of main. Open the .apk on an Android 8.0+ phone and allow installs from this source when asked. $KEY_STATUS"
+            --notes "Debug build of main. Open the .apk on an Android 8.0+ phone and allow installs from this source when asked. $KEY_STATUS $SIGN_STATUS"
 
       # A new versionName publishes a full release, named and noted from CHANGELOG.md.
       # Re-running for an existing version (Actions > Android build > Run workflow) replaces its APK.
@@ -81,7 +111,7 @@ jobs:
           VERSION=$(sed -n 's/.*versionName = "\(.*\)".*/\1/p' app/build.gradle.kts)
           TAG="v$VERSION"
           awk -v h="## $TAG" 'index($0, h) == 1 {on=1; next} /^## / {on=0} on' CHANGELOG.md > notes.md
-          printf '\n%s\n' "$KEY_STATUS" >> notes.md
+          printf '\n%s\n%s\n' "$KEY_STATUS" "$SIGN_STATUS" >> notes.md
           cp app/build/outputs/apk/debug/app-debug.apk "puddlejumper-$TAG.apk"
           if gh release view "$TAG" > /dev/null 2>&1; then
             # Rebuild of an existing version (e.g. after adding API key secrets): replace its APK.
