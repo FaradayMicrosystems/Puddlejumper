@@ -10,9 +10,34 @@ enum class ChargerSourceType { NREL, OPEN_CHARGE_MAP }
 class Prefs(context: Context) {
     private val sp = context.getSharedPreferences("puddlejumper", Context.MODE_PRIVATE)
 
-    var fullRangeMeters: Double
-        get() = sp.getFloat("fullRangeMeters", 400_000f).toDouble()
-        set(v) = sp.edit().putFloat("fullRangeMeters", v.toFloat()).apply()
+    /** Usable battery capacity, kWh. */
+    var usableKwh: Double
+        get() = sp.getFloat("usableKwh", 75f).toDouble()
+        set(v) = sp.edit().putFloat("usableKwh", v.toFloat()).apply()
+
+    /** Average consumption, kWh/100 km. */
+    var kwhPer100Km: Double
+        get() = sp.getFloat("kwhPer100Km", 18f).toDouble()
+        set(v) = sp.edit().putFloat("kwhPer100Km", v.toFloat()).apply()
+
+    /** Car plus people, kg; used for the energy of hills. */
+    var massKg: Double
+        get() = sp.getFloat("massKg", 2_100f).toDouble()
+        set(v) = sp.edit().putFloat("massKg", v.toFloat()).apply()
+
+    /** Battery charge now, 0..100. */
+    var batteryPercent: Double
+        get() = sp.getFloat("batteryPercent", 80f).toDouble()
+        set(v) = sp.edit().putFloat("batteryPercent", v.toFloat()).apply()
+
+    /** Lower the battery estimate as you drive (from distance x consumption). */
+    var countDownBattery: Boolean
+        get() = sp.getBoolean("countDownBattery", true)
+        set(v) = sp.edit().putBoolean("countDownBattery", v).apply()
+
+    var rangeTreeOn: Boolean
+        get() = sp.getBoolean("rangeTreeOn", true)
+        set(v) = sp.edit().putBoolean("rangeTreeOn", v).apply()
 
     var reservePercent: Int
         get() = sp.getInt("reservePercent", 10)
@@ -21,10 +46,6 @@ class Prefs(context: Context) {
     var chargeAtEachStop: Boolean
         get() = sp.getBoolean("chargeAtEachStop", true)
         set(v) = sp.edit().putBoolean("chargeAtEachStop", v).apply()
-
-    var multiJumpView: Boolean
-        get() = sp.getBoolean("multiJumpView", false)
-        set(v) = sp.edit().putBoolean("multiJumpView", v).apply()
 
     var weatherOn: Boolean
         get() = sp.getBoolean("weatherOn", false)

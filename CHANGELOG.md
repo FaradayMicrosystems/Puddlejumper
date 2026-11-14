@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.8.0 — 2026-11-14
+
+- Range tree replaces the range areas around stops. Yellow roads grow out from your location in 24
+  directions, each drawn as far as your battery (above the reserve) gets you. It follows your location
+  marker and rebuilds after you move 2 km.
+- Terrain: heights from Open-Meteo Elevation (free, no key). Climbs cost energy, descents give some back.
+- New in Settings: usable battery (kWh), average consumption (kWh/100 km), car weight (kg), and
+  "Count battery down as I drive". The main slider is now the battery % you have now.
+- Trip range on arrival now starts from your current battery, not a full charge.
+- Removed the multi-jump rings (they belonged to the old range areas).
+
 ## v0.7.0 — 2026-11-14
 
 - Turn-by-turn navigation: plan a route, then tap Start. A banner shows the next turn with an arrow and the
