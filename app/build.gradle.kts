@@ -8,6 +8,8 @@ plugins {
 // Optional keys go in local.properties (not committed):
 //   NREL_API_KEY=...   (free at developer.nrel.gov; DEMO_KEY is used if missing)
 //   OCM_API_KEY=...    (Open Charge Map; GitHub builds take it from the OCM_API_KEY repository secret)
+//   MAPBOX_ACCESS_TOKEN=pk... (Mapbox public token for routes and turn-by-turn; GitHub builds take it from the
+//                       MAPBOX_ACCESS_TOKEN repository secret. Without it, routes come from the OSRM test server.)
 val localProps = Properties().apply {
     val f = rootProject.file("local.properties")
     if (f.exists()) f.inputStream().use { load(it) }
@@ -22,11 +24,12 @@ android {
         applicationId = "app.puddlejumper"
         minSdk = 26
         targetSdk = 35
-        versionCode = 16
-        versionName = "0.6.9"
+        versionCode = 17
+        versionName = "0.7.0"
         buildConfigField("String", "NREL_API_KEY", key("NREL_API_KEY", "DEMO_KEY"))
         // Never commit keys here: they come from local.properties or the CI secret.
         buildConfigField("String", "OCM_API_KEY", key("OCM_API_KEY"))
+        buildConfigField("String", "MAPBOX_ACCESS_TOKEN", key("MAPBOX_ACCESS_TOKEN"))
         // In-app updates look for newer versioned releases here.
         buildConfigField("String", "UPDATE_REPO", "\"FaradayMicrosystems/Puddlejumper\"")
     }

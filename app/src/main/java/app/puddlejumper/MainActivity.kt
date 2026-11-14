@@ -4,7 +4,10 @@ import android.Manifest
 import android.content.pm.PackageManager
 import android.graphics.Color
 import android.graphics.DashPathEffect
+import android.os.Build
 import android.os.Bundle
+import android.view.View
+import android.view.WindowManager
 import android.view.HapticFeedbackConstants
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
@@ -29,6 +32,7 @@ import app.puddlejumper.core.ChargerStatus
 import app.puddlejumper.core.ChargingStation
 import app.puddlejumper.core.Forecast
 import app.puddlejumper.core.Geo
+import app.puddlejumper.core.Guidance
 import app.puddlejumper.core.Km
 import app.puddlejumper.core.LatLon
 import app.puddlejumper.core.Place
@@ -62,6 +66,8 @@ import org.osmdroid.views.overlay.Polygon
 import org.osmdroid.views.overlay.Polyline
 import org.osmdroid.views.overlay.mylocation.GpsMyLocationProvider
 import org.osmdroid.views.overlay.mylocation.MyLocationNewOverlay
+import java.text.DateFormat
+import java.util.Date
 import kotlin.math.roundToInt
 
 class MainActivity : AppCompatActivity() {
@@ -84,6 +90,9 @@ class MainActivity : AppCompatActivity() {
     private var suggestJob: Job? = null
     private var followOnGrant = true
     private lateinit var updater: Updater
+
+    /** True while this screen shows navigation (map zoomed in and following the car). */
+    private var navScreen = false
 
     /** Shows whatever suggestions were fetched last; the server already matched them, so no local filtering. */
     private inner class SuggestionAdapter :
@@ -212,7 +221,15 @@ class MainActivity : AppCompatActivity() {
             vm.setWeatherOn(on)
         }
 
-        findViewById<Button>(R.id.routeButton).setOnClickListener { vm.computeRoute() }
+        // Route plans the trip; once planned, the same button starts turn-by-turn guidance.
+        findViewById<Button>(R.id.routeButton).setOnClickListener {
+            if (vm.state.value.route != null) startNavigation() else vm.computeRoute()
+        }
+        findViewById<Button>(R.id.navEnd).setOnClickListener { vm.stopNavigation() }
+        findViewById<ImageButton>(R.id.navMute).setOnClickListener {
+            val muted = vm.state.value.nav?.muted ?: return@setOnClickListener
+            vm.setVoiceMuted(!muted)
+        }
         findViewById<Button>(R.id.chargersButton).setOnClickListener {
             vm.loadChargers(viewCenter(), viewRadius())
         }
@@ -234,6 +251,8 @@ class MainActivity : AppCompatActivity() {
         if (multiJump.isChecked != s.multiJumpView) multiJump.isChecked = s.multiJumpView
         if (weatherLayer.isChecked != s.weatherOn) weatherLayer.isChecked = s.weatherOn
         summary.text = summaryText(s)
+        findViewById<Button>(R.id.routeButton).text = getString(if (s.route != null) R.string.start else R.string.route)
+        renderNav(s)
 
         drawOverlays(s)
         if (s.route != null && s.route !== zoomedRoute) {
@@ -291,11 +310,12 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        s.route?.let { route ->
+        // While navigating, draw the route being driven (it changes after a reroute).
+        (s.nav?.route ?: s.route)?.let { route ->
             drawn += Polyline(map).apply {
                 setPoints(route.geometry.map { GeoPoint(it.lat, it.lon) })
                 outlinePaint.color = Color.rgb(43, 108, 176)
-                outlinePaint.strokeWidth = 10f
+                outlinePaint.strokeWidth = if (s.nav != null) 16f else 10f
                 setOnClickListener { _, _, _ -> false }
             }
         }
@@ -529,6 +549,112 @@ class MainActivity : AppCompatActivity() {
         if (points.size < 2) return
         val b = Geo.bounds(points)
         map.zoomToBoundingBox(BoundingBox(b.north, b.east, b.south, b.west), true, 120)
+    }
+
+    // ---- Turn-by-turn navigation ----
+
+    private fun hasLocationPermission() =
+        ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+
+    private fun startNavigation() {
+        if (!hasLocationPermission()) {
+            Snackbar.make(map, "Turn-by-turn needs precise location. Allow it, then tap Start again.", Snackbar.LENGTH_LONG).show()
+            locationPermission.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
+            return
+        }
+        // Android 13+: the next-turn notification needs permission. Guidance works without it.
+        if (Build.VERSION.SDK_INT >= 33 &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+        vm.startNavigation()
+    }
+
+    private val notificationPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
+
+    /** Shows or hides the navigation screen. GPS and voice run in [NavigationService]. */
+    private fun renderNav(s: UiState) {
+        val nav = s.nav
+        val navigating = nav != null
+        findViewById<View>(R.id.navBanner).isVisible = navigating
+        findViewById<View>(R.id.navBar).isVisible = navigating
+        findViewById<View>(R.id.searchCard).isVisible = !navigating
+        findViewById<View>(R.id.planCard).isVisible = !navigating
+        findViewById<View>(R.id.myLocation).isVisible = !navigating
+
+        if (nav == null) {
+            if (navScreen) leaveNavScreen()
+            return
+        }
+        if (!navScreen) enterNavScreen()
+        // Follow the car, heading up once it is moving.
+        nav.position?.let { pos ->
+            val at = nav.progress?.takeIf { !it.offRoute }?.snapped ?: pos
+            map.controller.animateTo(GeoPoint(at.lat, at.lon))
+        }
+        nav.headingDeg?.let { map.mapOrientation = -it.toFloat() }
+
+        findViewById<ImageButton>(R.id.navMute).setImageResource(
+            if (nav.muted) android.R.drawable.ic_lock_silent_mode else android.R.drawable.ic_lock_silent_mode_off
+        )
+        val arrow = findViewById<TextView>(R.id.navArrow)
+        val distance = findViewById<TextView>(R.id.navDistance)
+        val instruction = findViewById<TextView>(R.id.navInstruction)
+        val secondary = findViewById<TextView>(R.id.navSecondary)
+        val trip = findViewById<TextView>(R.id.navTrip)
+        val p = nav.progress
+        when {
+            nav.rerouting -> {
+                arrow.text = "\u21BB"
+                distance.text = "Rerouting…"
+                instruction.text = "Finding a new route from here"
+                secondary.isVisible = false
+            }
+            p == null -> {
+                arrow.text = "\u2191"
+                distance.text = "Waiting for GPS…"
+                instruction.text = nav.route.legs.firstOrNull()?.steps?.firstOrNull()?.instruction.orEmpty()
+                secondary.isVisible = false
+            }
+            p.arrived -> {
+                arrow.text = "\u2691"
+                distance.text = "Arrived"
+                instruction.text = s.waypoints.lastOrNull()?.name.orEmpty()
+                secondary.isVisible = false
+            }
+            else -> {
+                val b = p.banner
+                arrow.text = b?.let { Guidance.arrow(it.maneuver) } ?: "\u2191"
+                distance.text = Guidance.shortDistance(p.distanceToManeuverM)
+                instruction.text = b?.text ?: ""
+                secondary.text = b?.secondary.orEmpty()
+                secondary.isVisible = !b?.secondary.isNullOrBlank()
+            }
+        }
+        trip.text = if (p == null || p.arrived) {
+            if (p?.arrived == true) "Trip finished. Tap End." else "Routes by ${vm.routerName}"
+        } else {
+            val eta = DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(System.currentTimeMillis() + (p.durationRemainingS * 1000).toLong()))
+            val toStop = if (p.distanceToNextStopM < p.distanceRemainingM - 50) {
+                "\nStop ${nav.nextStopNumber} in ${Guidance.shortDistance(p.distanceToNextStopM)}"
+            } else ""
+            "${Guidance.shortDistance(p.distanceRemainingM)} · ${Guidance.duration(p.durationRemainingS)} · arrive $eta$toStop"
+        }
+    }
+
+    private fun enterNavScreen() {
+        navScreen = true
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        locationOverlay?.disableFollowLocation()
+        map.controller.setZoom(17.0)
+    }
+
+    private fun leaveNavScreen() {
+        navScreen = false
+        window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        map.mapOrientation = 0f
+        map.controller.setZoom(13.0)
     }
 
     override fun onResume() {

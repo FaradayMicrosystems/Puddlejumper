@@ -9,6 +9,8 @@ import app.puddlejumper.core.Km
 import app.puddlejumper.core.Forecast
 import app.puddlejumper.core.LatLon
 import app.puddlejumper.core.LegReport
+import app.puddlejumper.core.MapboxRouter
+import app.puddlejumper.core.NavProgress
 import app.puddlejumper.core.NominatimGeocoder
 import app.puddlejumper.core.NrelSource
 import app.puddlejumper.core.OpenMeteo
@@ -21,6 +23,7 @@ import app.puddlejumper.core.RangeSettings
 import app.puddlejumper.core.ReachProfile
 import app.puddlejumper.core.RoadReachSampler
 import app.puddlejumper.core.Route
+import app.puddlejumper.core.Router
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
@@ -35,6 +38,22 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 data class Waypoint(val name: String, val location: LatLon, val isCurrentLocation: Boolean = false)
+
+/** Turn-by-turn guidance in progress. */
+data class NavUi(
+    /** The route being driven; replaced after each reroute. */
+    val route: Route,
+    /** Latest position on the route; null until the first GPS reading. */
+    val progress: NavProgress? = null,
+    val rerouting: Boolean = false,
+    val muted: Boolean = false,
+    /** Number of the stop the driver is heading to, as shown on the map (stop 1 is the start). */
+    val nextStopNumber: Int = 2,
+    /** Direction of travel from GPS, once moving; used to turn the map heading-up. */
+    val headingDeg: Double? = null,
+    /** Latest GPS position (not snapped to the route). */
+    val position: LatLon? = null,
+)
 
 data class UiState(
     val waypoints: List<Waypoint> = emptyList(),
@@ -58,13 +77,18 @@ data class UiState(
      */
     val reach: Map<LatLon, ReachProfile> = emptyMap(),
     val loading: Boolean = false,
+    /** Non-null while navigating. */
+    val nav: NavUi? = null,
     /** One-shot message for a snackbar; cleared by [MainViewModel.messageShown]. */
     val message: String? = null,
 )
 
 class MainViewModel(app: Application) : AndroidViewModel(app) {
     val prefs = Prefs(app)
-    private val router = OsrmRouter()
+    /** Mapbox when this build has a token (repository secret MAPBOX_ACCESS_TOKEN), else the OSRM test server. */
+    private val router: Router =
+        BuildConfig.MAPBOX_ACCESS_TOKEN.takeIf { it.isNotBlank() }?.let { MapboxRouter(it) } ?: OsrmRouter()
+    val routerName: String get() = router.name
 
     private val _state = MutableStateFlow(
         UiState(
@@ -249,6 +273,27 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             val route = router.parse(Http.get(router.routeUrl(stops.map { it.location })))
             _state.update { it.copy(route = route, legs = plan(route, it.settings)) }
         }
+    }
+
+    // ---- Turn-by-turn navigation (runs in NavSession + NavigationService so it survives the screen) ----
+
+    init {
+        viewModelScope.launch { NavSession.state.collect { n -> _state.update { it.copy(nav = n) } } }
+        viewModelScope.launch { NavSession.messages.collect { say(it) } }
+    }
+
+    fun startNavigation() {
+        val s = _state.value
+        val route = s.route ?: return say("Plan a route first.")
+        NavSession.start(getApplication(), route, s.waypoints.drop(1).map { it.location }, router, prefs.voiceMuted)
+        if (router is OsrmRouter) say("Using the OSRM test server: this build has no Mapbox token.")
+    }
+
+    fun stopNavigation() = NavSession.stop(getApplication())
+
+    fun setVoiceMuted(muted: Boolean) {
+        prefs.voiceMuted = muted
+        NavSession.setMuted(muted)
     }
 
     /** Loads chargers along the route when there is one (NREL), otherwise around [center]. */

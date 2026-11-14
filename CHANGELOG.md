@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.7.0 — 2026-11-14
+
+- Turn-by-turn navigation: plan a route, then tap Start. A banner shows the next turn with an arrow and the
+  distance in m/km; the bar below shows km and time left, arrival time and the next stop.
+- Voice guidance with Android's built-in text-to-speech, metric only. Music is turned down while it speaks.
+  The speaker button mutes it.
+- Automatic rerouting: leave the route and a new one is fetched from where you are to the stops you haven't reached.
+- Routes come from Mapbox (live traffic for trips with up to 3 stops) when the build has the
+  `MAPBOX_ACCESS_TOKEN` repository secret. Without it, the OSRM test server is still used.
+- The screen stays on while navigating.
+- Guidance keeps going with the screen off or another app open: voice prompts continue and a notification
+  shows the next turn and km left. Tap it to return to the map; its End button stops navigation.
+
 ## v0.6.9 — 2026-11-14
 
 - Range circles are now road-accurate range areas. Each stop's green and orange areas (and the

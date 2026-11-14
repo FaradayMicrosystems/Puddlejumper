@@ -30,6 +30,10 @@ class Prefs(context: Context) {
         get() = sp.getBoolean("weatherOn", false)
         set(v) = sp.edit().putBoolean("weatherOn", v).apply()
 
+    var voiceMuted: Boolean
+        get() = sp.getBoolean("voiceMuted", false)
+        set(v) = sp.edit().putBoolean("voiceMuted", v).apply()
+
     var chargerSource: ChargerSourceType
         // Open Charge Map by default when the build has its key, otherwise NREL.
         get() = runCatching { ChargerSourceType.valueOf(sp.getString("chargerSource", null)!!) }
