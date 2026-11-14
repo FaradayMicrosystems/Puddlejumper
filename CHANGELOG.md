@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.7.2 — 2026-11-14
+
+- Navigation prompts are spoken in a Scottish male voice, built into the app and working offline.
+- Settings > Navigation voice: choose from six Scottish voices (tap one to hear it), or the phone's own voice.
+- If the built-in voice can't start on a phone, the phone's own voice is used instead.
+- The APK is larger (about 80 MB more) because the voice is inside it.
+- Voice: CSTR VCTK Corpus, University of Edinburgh (CC BY 4.0), via Piper and sherpa-onnx.
+
 ## v0.7.1 — 2026-11-14
 
 - Range tree replaces the range areas around stops. Yellow roads grow out from your location in 24

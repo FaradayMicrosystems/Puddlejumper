@@ -450,6 +450,29 @@ class MainActivity : AppCompatActivity() {
             .show()
     }
 
+    private fun voiceLabel(id: String) =
+        if (id == Prefs.PHONE_VOICE) "Phone's own voice" else "Scottish: ${NeuralVoice.voice(id).label}"
+
+    /** Choose the navigation voice; each tap plays a sample. Saved straight away. */
+    private fun pickVoice(onPicked: (String) -> Unit) {
+        val ids = NeuralVoice.voices.map { it.id } + Prefs.PHONE_VOICE
+        val labels = ids.map(::voiceLabel).toTypedArray()
+        val preview = previewVoice ?: NavVoice(this).also { previewVoice = it }
+        MaterialAlertDialogBuilder(this)
+            .setTitle("Navigation voice (tap to hear)")
+            .setSingleChoiceItems(labels, ids.indexOf(vm.prefs.navVoice).coerceAtLeast(0)) { _, which ->
+                vm.prefs.navVoice = ids[which]
+                onPicked(ids[which])
+                preview.stop()
+                preview.say("In 500 metres, turn left onto Princes Street.")
+            }
+            .setPositiveButton("Done", null)
+            .show()
+    }
+
+    /** Plays voice samples in Settings; made on first use. */
+    private var previewVoice: NavVoice? = null
+
     private fun showSettings() {
         val view = layoutInflater.inflate(R.layout.dialog_settings, null)
         val prefs = vm.prefs
@@ -471,6 +494,10 @@ class MainActivity : AppCompatActivity() {
         mass.setText(trim(state.ev.massKg))
         countDown.isChecked = prefs.countDownBattery
         view.findViewById<TextView>(R.id.versionLabel).text = "Installed: v${BuildConfig.VERSION_NAME}"
+        val voiceButton = view.findViewById<Button>(R.id.navVoice)
+        voiceButton.text = voiceLabel(prefs.navVoice)
+        voiceButton.setOnClickListener { pickVoice { voiceButton.text = voiceLabel(it) } }
+        view.findViewById<TextView>(R.id.voiceCredit).text = NeuralVoice.CREDIT
 
         val dialog = MaterialAlertDialogBuilder(this)
             .setTitle(R.string.settings)
@@ -671,6 +698,11 @@ class MainActivity : AppCompatActivity() {
         window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         map.mapOrientation = 0f
         map.controller.setZoom(13.0)
+    }
+
+    override fun onDestroy() {
+        previewVoice?.shutdown()
+        super.onDestroy()
     }
 
     override fun onResume() {

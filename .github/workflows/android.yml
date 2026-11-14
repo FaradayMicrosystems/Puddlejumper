@@ -105,6 +105,10 @@ jobs:
           echo "Mapbox answered HTTP $CODE: $(head -c 200 mapbox.json)"
           [ "$CODE" = "200" ]
 
+      # Offline Scottish navigation voice (engine + model, about 80 MB), pinned by checksum.
+      - name: Fetch navigation voice
+        run: bash scripts/fetch-voice.sh
+
       - name: Unit tests
         run: ./gradlew :core:test --stacktrace
 
