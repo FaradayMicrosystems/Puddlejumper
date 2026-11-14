@@ -5,7 +5,6 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import app.puddlejumper.core.ChargerSource
 import app.puddlejumper.core.ChargingStation
-import app.puddlejumper.core.Km
 import app.puddlejumper.core.Forecast
 import app.puddlejumper.core.LatLon
 import app.puddlejumper.core.LegReport
@@ -20,8 +19,13 @@ import app.puddlejumper.core.PhotonGeocoder
 import app.puddlejumper.core.Place
 import app.puddlejumper.core.RangePlanner
 import app.puddlejumper.core.RangeSettings
-import app.puddlejumper.core.ReachProfile
-import app.puddlejumper.core.RoadReachSampler
+import app.puddlejumper.core.BranchRouter
+import app.puddlejumper.core.EvModel
+import app.puddlejumper.core.Geo
+import app.puddlejumper.core.OpenMeteoElevation
+import app.puddlejumper.core.Path
+import app.puddlejumper.core.RangeTree
+import app.puddlejumper.core.TreeBranch
 import app.puddlejumper.core.Route
 import app.puddlejumper.core.Router
 import kotlinx.coroutines.CancellationException
@@ -32,6 +36,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
@@ -55,14 +61,33 @@ data class NavUi(
     val position: LatLon? = null,
 )
 
+/** The yellow range tree: roads you can reach from [origin] on the battery you have now. */
+data class RangeTreeUi(
+    val origin: LatLon,
+    val branches: List<TreeBranch>,
+    /** True once heights are in; until then the tree assumes flat roads. */
+    val terrain: Boolean,
+    /** True while routes are still loading. */
+    val building: Boolean,
+) {
+    /** Longest road distance in the tree. */
+    val maxRoadMeters: Double get() = branches.maxOfOrNull { it.roadMeters } ?: 0.0
+}
+
 data class UiState(
     val waypoints: List<Waypoint> = emptyList(),
     val route: Route? = null,
     val legs: List<LegReport> = emptyList(),
     val chargers: List<ChargingStation> = emptyList(),
     val settings: RangeSettings,
-    /** Draw extra rings at 2 and 3 full charges around each stop. */
-    val multiJumpView: Boolean = false,
+    /** The car: battery size, consumption, weight. */
+    val ev: EvModel,
+    /** Battery charge now, 0..100. */
+    val batteryPercent: Double,
+    /** Draw the range tree from your location. */
+    val rangeTreeOn: Boolean = true,
+    /** Null until there is a GPS fix and the first routes are in. */
+    val tree: RangeTreeUi? = null,
     /** True once the user has tapped Chargers; the map then reloads chargers as it moves. */
     val chargersOn: Boolean = false,
     /** Weather layer: forecasts at the map centre and at every stop. */
@@ -71,11 +96,6 @@ data class UiState(
     val centerForecast: Forecast? = null,
     /** Forecasts at stops, keyed by the stop's position. */
     val stopForecasts: Map<LatLon, Forecast> = emptyMap(),
-    /**
-     * Road-network reach around each stop, keyed by the stop's position. A stop without one
-     * (still loading, offline) falls back to a straight-line circle.
-     */
-    val reach: Map<LatLon, ReachProfile> = emptyMap(),
     val loading: Boolean = false,
     /** Non-null while navigating. */
     val nav: NavUi? = null,
@@ -91,13 +111,17 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     val routerName: String get() = router.name
 
     private val _state = MutableStateFlow(
-        UiState(
-            settings = RangeSettings(prefs.fullRangeMeters, prefs.reservePercent, prefs.chargeAtEachStop),
-            // Stops from the last session. GPS adds "My location" in front once it has a fix.
-            waypoints = prefs.savedStops,
-            multiJumpView = prefs.multiJumpView,
-            weatherOn = prefs.weatherOn,
-        )
+        EvModel(prefs.usableKwh, prefs.kwhPer100Km, prefs.massKg).let { ev ->
+            UiState(
+                settings = rangeSettings(ev, prefs.batteryPercent, prefs.reservePercent, prefs.chargeAtEachStop),
+                ev = ev,
+                batteryPercent = prefs.batteryPercent,
+                rangeTreeOn = prefs.rangeTreeOn,
+                // Stops from the last session. GPS adds "My location" in front once it has a fix.
+                waypoints = prefs.savedStops,
+                weatherOn = prefs.weatherOn,
+            )
+        }
     )
     val state: StateFlow<UiState> = _state
 
@@ -152,15 +176,161 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         )
     }
 
-    fun setFullRange(km: Double) = updateSettings { it.copy(fullRangeMeters = Km.toMeters(km)) }
+    fun setBatteryPercent(p: Double) {
+        val v = p.coerceIn(0.0, 100.0)
+        prefs.batteryPercent = v
+        _state.update { it.copy(batteryPercent = v) }
+        updateSettings { it }
+    }
+
+    /** Car details from Settings. Invalid (zero or negative) values are ignored. */
+    fun setEv(usableKwh: Double, kwhPer100Km: Double, massKg: Double) {
+        val ev = runCatching { EvModel(usableKwh, kwhPer100Km, massKg) }.getOrElse { return say("Battery, consumption and weight must be above 0.") }
+        prefs.usableKwh = usableKwh
+        prefs.kwhPer100Km = kwhPer100Km
+        prefs.massKg = massKg
+        _state.update { it.copy(ev = ev) }
+        updateSettings { it }
+    }
 
     fun setChargeAtEachStop(on: Boolean) = updateSettings { it.copy(chargeToFullAtEachStop = on) }
 
     fun setReservePercent(p: Int) = updateSettings { it.copy(reservePercent = p) }
 
-    fun setMultiJumpView(on: Boolean) {
-        prefs.multiJumpView = on
-        _state.update { it.copy(multiJumpView = on) }
+    fun setRangeTreeOn(on: Boolean) {
+        prefs.rangeTreeOn = on
+        _state.update { it.copy(rangeTreeOn = on, tree = if (on) it.tree else null) }
+    }
+
+    // ---- Range tree ----
+
+    /** Latest GPS position, from the map's location marker or from navigation. */
+    private val liveLocation = MutableStateFlow<LatLon?>(null)
+    /** Where the battery countdown last measured from. */
+    private var lastDrainAt: LatLon? = null
+
+    /**
+     * A GPS reading. Moves the range tree with you and, while driving, lowers the battery estimate by
+     * distance x consumption (flat; the driver can correct it with the slider at any time).
+     */
+    fun onLocation(p: LatLon, speedMps: Double?) {
+        liveLocation.value = p
+        val last = lastDrainAt
+        val driving = (speedMps ?: 0.0) >= DRIVING_SPEED_MPS
+        if (last == null || !driving || !prefs.countDownBattery) {
+            lastDrainAt = p
+            return
+        }
+        val d = Geo.distanceMeters(last, p)
+        if (d < DRAIN_STEP_M) return
+        lastDrainAt = p
+        if (d > DRAIN_MAX_JUMP_M) return // GPS jump or app was asleep: don't guess
+        val s = _state.value
+        setBatteryPercent(s.batteryPercent - s.ev.percentOf(s.ev.flatKwh(d)))
+    }
+
+    private val branchRouter: BranchRouter =
+        BuildConfig.MAPBOX_ACCESS_TOKEN.takeIf { it.isNotBlank() }?.let { BranchRouter.mapbox(it) } ?: BranchRouter.osrm()
+
+    /** Roads fetched for the tree, before cutting to the battery. */
+    private class RawTree(val origin: LatLon, val reachMeters: Double, val paths: Map<Double, Path>)
+
+    private var raw: RawTree? = null
+    private var fetchJob: Job? = null
+    private var lastFetchMs = 0L
+    /** Terrain heights by ~1 km grid cell; hills don't move, so this is kept for the whole session. */
+    private val heights = object : LinkedHashMap<String, Double>(1024, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Double>?) = size > MAX_HEIGHTS
+    }
+
+    /** Re-cuts the fetched roads for the current battery and car, or fetches new roads when you've moved. */
+    private fun updateTree(loc: LatLon) {
+        val s = _state.value
+        val budget = s.ev.budgetKwh(s.batteryPercent, s.settings.reservePercent)
+        // Straight-line reach we need roads for: the flat range, plus room for downhill gains.
+        val need = s.ev.fullRangeMeters * (s.batteryPercent - s.settings.reservePercent).coerceAtLeast(1.0) / 100.0
+        val r = raw
+        val fresh = r != null && Geo.distanceMeters(r.origin, loc) < TREE_MOVE_M && need <= r.reachMeters * 0.9
+        if (r != null) clipTree(r, budget, building = fetchJob?.isActive == true)
+        if (fresh || fetchJob?.isActive == true) return
+        if (r != null && System.currentTimeMillis() - lastFetchMs < TREE_MIN_INTERVAL_MS) return
+        fetchTree(loc, need * TREE_REACH_MARGIN)
+    }
+
+    private fun clipTree(r: RawTree, budgetKwh: Double, building: Boolean) {
+        val s = _state.value
+        var terrain = false
+        val branches = r.paths.map { (bearing, path) ->
+            val samples = RangeTree.elevationSamples(path, HEIGHT_SPACING_M, path.lengthMeters)
+            val profile = samples.mapNotNull { (d, p) -> heights[OpenMeteoElevation.key(p)]?.let { d to it } }
+            if (profile.size >= samples.size / 2) terrain = true
+            RangeTree.clip(bearing, path, if (profile.size >= 2) profile else emptyList(), s.ev, budgetKwh)
+        }
+        _state.update { it.copy(tree = RangeTreeUi(r.origin, branches, terrain, building)) }
+    }
+
+    /** One road per bearing (spaced to respect the router's limits), then terrain heights for them. */
+    private fun fetchTree(origin: LatLon, reachMeters: Double) {
+        lastFetchMs = System.currentTimeMillis()
+        val progressive = raw == null
+        if (!progressive) _state.update { it.copy(tree = it.tree?.copy(building = true)) }
+        fetchJob = viewModelScope.launch {
+            val paths = linkedMapOf<Double, Path>()
+            var building = RawTree(origin, reachMeters, paths)
+            RangeTree.targets(origin, reachMeters).zip(RangeTree.BEARINGS).forEach { (target, bearing) ->
+                val path = try {
+                    branchRouter.parse(Http.get(branchRouter.url(origin, target)))
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    null // skip this bearing; the rest of the tree still shows
+                }
+                if (path != null && path.points.size >= 2) {
+                    paths[bearing] = path
+                    building = RawTree(origin, reachMeters, LinkedHashMap(paths))
+                    // First tree: draw branches as they arrive. Later trees replace the old one when done.
+                    if (progressive) {
+                        raw = building
+                        redrawTree(building, true)
+                    }
+                }
+                delay(branchRouter.requestGapMs)
+            }
+            if (paths.isEmpty()) {
+                _state.update { it.copy(tree = it.tree?.copy(building = false)) }
+                return@launch say("Couldn't load roads for the range tree. It will retry as you move.")
+            }
+            fetchHeights(paths.values)
+            raw = building
+            redrawTree(building, false)
+        }
+    }
+
+    private fun redrawTree(r: RawTree, building: Boolean) {
+        val s = _state.value
+        if (!s.rangeTreeOn) return
+        clipTree(r, s.ev.budgetKwh(s.batteryPercent, s.settings.reservePercent), building)
+    }
+
+    /** Looks up heights the cache doesn't have yet, 100 per request. Failures leave those roads flat. */
+    private suspend fun fetchHeights(paths: Collection<Path>) {
+        val missing = paths.asSequence()
+            .flatMap { RangeTree.elevationSamples(it, HEIGHT_SPACING_M, it.lengthMeters).asSequence() }
+            .map { it.second }
+            .filter { OpenMeteoElevation.key(it) !in heights }
+            .distinctBy { OpenMeteoElevation.key(it) }
+            .take(MAX_HEIGHT_LOOKUPS)
+            .toList()
+        for (chunk in missing.chunked(OpenMeteoElevation.MAX_POINTS)) {
+            val values = try {
+                OpenMeteoElevation.parse(Http.get(OpenMeteoElevation.url(chunk)))
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                return
+            }
+            chunk.zip(values).forEach { (p, h) -> if (h != null) heights[OpenMeteoElevation.key(p)] = h }
+        }
     }
 
     fun setWeatherOn(on: Boolean) {
@@ -207,40 +377,27 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    private val reachSampler = RoadReachSampler()
-
-    /**
-     * Fetches road-network reach for stops that have none, or whose profile was sampled for a range more
-     * than 25% away from the current one. Smaller slider moves just rescale the existing profile.
-     * One request per stop, spaced out to respect the public OSRM server's usage policy.
-     */
-    private suspend fun refreshReach(stops: List<LatLon>, rangeM: Double) {
-        _state.update { s -> s.copy(reach = s.reach.filterKeys { it in stops }) }
-        for (p in stops.distinct()) {
-            if (_state.value.reach[p]?.fits(rangeM) == true) continue
-            val profile = try {
-                reachSampler.parse(Http.get(reachSampler.tableUrl(p, rangeM)), p, rangeM)
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                null // keep the circle (or the older profile) for this stop
-            }
-            if (profile != null) _state.update { s -> s.copy(reach = s.reach + (p to profile)) }
-            delay(REACH_REQUEST_GAP_MS)
-        }
-    }
-
-    // Declared after the weather and reach fields it uses, so they exist when it first runs.
+    // Declared after the weather and tree fields it uses, so they exist when it first runs.
     init {
-        // Stops or range changed: refresh road reach. collectLatest drops work for stale input,
-        // and the short wait lets the range slider settle before any request goes out.
+        // Range tree: follow your position and redraw when the battery or car changes. The short wait
+        // lets the battery slider settle; cutting fetched roads is instant, only a move fetches new ones.
         viewModelScope.launch {
-            _state.map { it.waypoints.map { w -> w.location } to it.settings.fullRangeMeters }
-                .distinctUntilChanged()
-                .collectLatest { (stops, range) ->
-                    delay(REACH_DEBOUNCE_MS)
-                    refreshReach(stops, range)
+            combine(
+                liveLocation,
+                _state.map { Triple(it.rangeTreeOn, it.ev, it.batteryPercent to it.settings.reservePercent) }.distinctUntilChanged(),
+            ) { loc, (on, _, _) -> if (on) loc else null }
+                .conflate()
+                .collectLatest { loc ->
+                    if (loc == null) return@collectLatest
+                    delay(TREE_DEBOUNCE_MS)
+                    updateTree(loc)
                 }
+        }
+        // Navigation GPS keeps the tree and battery estimate moving while the map screen is off.
+        viewModelScope.launch {
+            NavSession.state.map { it?.position to it?.headingDeg }.distinctUntilChanged().collect { (p, heading) ->
+                if (p != null) onLocation(p, if (heading != null) DRIVING_SPEED_MPS else 0.0)
+            }
         }
         // Save stops whenever they change, so they are still there after the app is closed.
         viewModelScope.launch {
@@ -257,8 +414,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private fun updateSettings(change: (RangeSettings) -> RangeSettings) {
-        val s = change(_state.value.settings)
-        prefs.fullRangeMeters = s.fullRangeMeters
+        val cur = _state.value
+        val s = change(cur.settings).let { rangeSettings(cur.ev, cur.batteryPercent, it.reservePercent, it.chargeToFullAtEachStop) }
         prefs.reservePercent = s.reservePercent
         prefs.chargeAtEachStop = s.chargeToFullAtEachStop
         _state.update { it.copy(settings = s, legs = it.route?.let { r -> plan(r, s) }.orEmpty()) }
@@ -382,7 +539,26 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         const val MAX_PER_REQUEST = 500
         const val MAX_SHOWN = 1_500
         const val FORECAST_MAX_AGE_MS = 60 * 60 * 1000L
-        const val REACH_DEBOUNCE_MS = 700L
-        const val REACH_REQUEST_GAP_MS = 1_100L
+        const val TREE_DEBOUNCE_MS = 400L
+        /** Fetch new roads once you are this far from where the tree was built. */
+        const val TREE_MOVE_M = 2_000.0
+        /** At most one road fetch per this long (24 requests each), except the first. */
+        const val TREE_MIN_INTERVAL_MS = 45_000L
+        /** Route targets this far past the flat range, so descents and long roads still get cut by the battery. */
+        const val TREE_REACH_MARGIN = 1.15
+        const val HEIGHT_SPACING_M = 3_000.0
+        const val MAX_HEIGHT_LOOKUPS = 3_000
+        const val MAX_HEIGHTS = 50_000
+        /** Below this GPS speed (about 15 km/h) the battery estimate doesn't count down (walking, parked). */
+        const val DRIVING_SPEED_MPS = 4.0
+        const val DRAIN_STEP_M = 200.0
+        const val DRAIN_MAX_JUMP_M = 3_000.0
+
+        fun rangeSettings(ev: EvModel, batteryPercent: Double, reservePercent: Int, chargeEach: Boolean) = RangeSettings(
+            fullRangeMeters = ev.fullRangeMeters,
+            reservePercent = reservePercent,
+            chargeToFullAtEachStop = chargeEach,
+            startRangeMeters = ev.fullRangeMeters * batteryPercent / 100.0,
+        )
     }
 }
