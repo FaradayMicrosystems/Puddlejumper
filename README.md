@@ -22,7 +22,7 @@ car's full-charge range, so you can see at a glance how far you can get from eac
   (symbol and high/low °C). Tap a badge for the full 5-day forecast: conditions, °C, rain in mm
   with chance, and maximum wind in km/h.
 - Your stops are saved and come back when you reopen the app. **Clear** removes them.
-- Settings: km (default) or miles, arrival reserve %, charger data source.
+- Settings: arrival reserve %, charger data source. All distances are in km.
 
 Marker legend: purple **F** = DC fast, blue **2** = Level 2, light blue **1** = Level 1,
 red = down or under maintenance, gray = planned, orange = in use (live sources only).

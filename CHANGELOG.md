@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.6.8 — 2026-11-14
+
+- Removed the Miles option from Settings. All distances are in km only.
+
 ## v0.6.7 — 2026-11-14
 
 - Your stops are saved and come back after the app is closed. "My location" is still added from GPS.

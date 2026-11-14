@@ -5,7 +5,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import app.puddlejumper.core.ChargerSource
 import app.puddlejumper.core.ChargingStation
-import app.puddlejumper.core.DistanceUnit
+import app.puddlejumper.core.Km
 import app.puddlejumper.core.Forecast
 import app.puddlejumper.core.LatLon
 import app.puddlejumper.core.LegReport
@@ -38,7 +38,6 @@ data class UiState(
     val legs: List<LegReport> = emptyList(),
     val chargers: List<ChargingStation> = emptyList(),
     val settings: RangeSettings,
-    val unit: DistanceUnit,
     /** Draw extra rings at 2 and 3 full charges around each stop. */
     val multiJumpView: Boolean = false,
     /** True once the user has tapped Chargers; the map then reloads chargers as it moves. */
@@ -61,7 +60,6 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val _state = MutableStateFlow(
         UiState(
             settings = RangeSettings(prefs.fullRangeMeters, prefs.reservePercent, prefs.chargeAtEachStop),
-            unit = prefs.unit,
             // Stops from the last session. GPS adds "My location" in front once it has a fix.
             waypoints = prefs.savedStops,
             multiJumpView = prefs.multiJumpView,
@@ -121,7 +119,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         )
     }
 
-    fun setFullRange(valueInUnit: Double) = updateSettings { it.copy(fullRangeMeters = _state.value.unit.toMeters(valueInUnit)) }
+    fun setFullRange(km: Double) = updateSettings { it.copy(fullRangeMeters = Km.toMeters(km)) }
 
     fun setChargeAtEachStop(on: Boolean) = updateSettings { it.copy(chargeToFullAtEachStop = on) }
 
@@ -190,11 +188,6 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 .distinctUntilChanged()
                 .collect { (on, _) -> if (on) refreshWeather() }
         }
-    }
-
-    fun setUnit(unit: DistanceUnit) {
-        prefs.unit = unit
-        _state.update { it.copy(unit = unit) }
     }
 
     private fun updateSettings(change: (RangeSettings) -> RangeSettings) {

@@ -13,9 +13,10 @@ class NrelSource(private val apiKey: String) : ChargerSource {
     override val name = "NREL AFDC"
 
     override fun nearbyUrl(center: LatLon, radiusMeters: Double, limit: Int): String {
-        val miles = (radiusMeters / 1609.344).coerceIn(1.0, 500.0)
+        // NREL's API only accepts the radius in miles; this conversion never reaches the UI.
+        val apiRadius = (radiusMeters / 1609.344).coerceIn(1.0, 500.0)
         return "$BASE/nearest.json?api_key=${enc(apiKey)}&fuel_type=ELEC&status=E,T,P&access=public" +
-            "&latitude=${center.lat}&longitude=${center.lon}&radius=${"%.1f".format(miles)}&limit=$limit"
+            "&latitude=${center.lat}&longitude=${center.lon}&radius=${"%.1f".format(apiRadius)}&limit=$limit"
     }
 
     /** POST target for stations along a route; see [routeForm]. */
