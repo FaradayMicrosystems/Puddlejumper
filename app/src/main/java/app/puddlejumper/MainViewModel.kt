@@ -5,7 +5,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import app.puddlejumper.core.ChargerSource
 import app.puddlejumper.core.ChargingStation
-import app.puddlejumper.core.DistanceUnit
+import app.puddlejumper.core.Km
 import app.puddlejumper.core.Forecast
 import app.puddlejumper.core.LatLon
 import app.puddlejumper.core.LegReport
@@ -22,17 +22,21 @@ import app.puddlejumper.core.PhotonGeocoder
 import app.puddlejumper.core.Place
 import app.puddlejumper.core.RangePlanner
 import app.puddlejumper.core.RangeSettings
+import app.puddlejumper.core.ReachProfile
 import app.puddlejumper.core.RerouteGate
+import app.puddlejumper.core.RoadReachSampler
 import app.puddlejumper.core.Route
 import app.puddlejumper.core.Router
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
@@ -58,7 +62,6 @@ data class UiState(
     val legs: List<LegReport> = emptyList(),
     val chargers: List<ChargingStation> = emptyList(),
     val settings: RangeSettings,
-    val unit: DistanceUnit,
     /** Draw extra rings at 2 and 3 full charges around each stop. */
     val multiJumpView: Boolean = false,
     /** True once the user has tapped Chargers; the map then reloads chargers as it moves. */
@@ -69,6 +72,11 @@ data class UiState(
     val centerForecast: Forecast? = null,
     /** Forecasts at stops, keyed by the stop's position. */
     val stopForecasts: Map<LatLon, Forecast> = emptyMap(),
+    /**
+     * Road-network reach around each stop, keyed by the stop's position. A stop without one
+     * (still loading, offline) falls back to a straight-line circle.
+     */
+    val reach: Map<LatLon, ReachProfile> = emptyMap(),
     val loading: Boolean = false,
     /** Non-null while navigating. */
     val nav: NavUi? = null,
@@ -86,7 +94,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val _state = MutableStateFlow(
         UiState(
             settings = RangeSettings(prefs.fullRangeMeters, prefs.reservePercent, prefs.chargeAtEachStop),
-            unit = prefs.unit,
+            // Stops from the last session. GPS adds "My location" in front once it has a fix.
+            waypoints = prefs.savedStops,
             multiJumpView = prefs.multiJumpView,
             weatherOn = prefs.weatherOn,
         )
@@ -144,7 +153,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         )
     }
 
-    fun setFullRange(valueInUnit: Double) = updateSettings { it.copy(fullRangeMeters = _state.value.unit.toMeters(valueInUnit)) }
+    fun setFullRange(km: Double) = updateSettings { it.copy(fullRangeMeters = Km.toMeters(km)) }
 
     fun setChargeAtEachStop(on: Boolean) = updateSettings { it.copy(chargeToFullAtEachStop = on) }
 
@@ -199,19 +208,53 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    // Declared after the weather fields it uses, so they exist when it first runs.
+    private val reachSampler = RoadReachSampler()
+
+    /**
+     * Fetches road-network reach for stops that have none, or whose profile was sampled for a range more
+     * than 25% away from the current one. Smaller slider moves just rescale the existing profile.
+     * One request per stop, spaced out to respect the public OSRM server's usage policy.
+     */
+    private suspend fun refreshReach(stops: List<LatLon>, rangeM: Double) {
+        _state.update { s -> s.copy(reach = s.reach.filterKeys { it in stops }) }
+        for (p in stops.distinct()) {
+            if (_state.value.reach[p]?.fits(rangeM) == true) continue
+            val profile = try {
+                reachSampler.parse(Http.get(reachSampler.tableUrl(p, rangeM)), p, rangeM)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                null // keep the circle (or the older profile) for this stop
+            }
+            if (profile != null) _state.update { s -> s.copy(reach = s.reach + (p to profile)) }
+            delay(REACH_REQUEST_GAP_MS)
+        }
+    }
+
+    // Declared after the weather and reach fields it uses, so they exist when it first runs.
     init {
+        // Stops or range changed: refresh road reach. collectLatest drops work for stale input,
+        // and the short wait lets the range slider settle before any request goes out.
+        viewModelScope.launch {
+            _state.map { it.waypoints.map { w -> w.location } to it.settings.fullRangeMeters }
+                .distinctUntilChanged()
+                .collectLatest { (stops, range) ->
+                    delay(REACH_DEBOUNCE_MS)
+                    refreshReach(stops, range)
+                }
+        }
+        // Save stops whenever they change, so they are still there after the app is closed.
+        viewModelScope.launch {
+            _state.map { it.waypoints }
+                .distinctUntilChanged()
+                .collect { prefs.savedStops = it }
+        }
         // Stops added, removed or moved: fetch weather for them too.
         viewModelScope.launch {
             _state.map { it.weatherOn to it.waypoints.map { w -> w.location } }
                 .distinctUntilChanged()
                 .collect { (on, _) -> if (on) refreshWeather() }
         }
-    }
-
-    fun setUnit(unit: DistanceUnit) {
-        prefs.unit = unit
-        _state.update { it.copy(unit = unit) }
     }
 
     private fun updateSettings(change: (RangeSettings) -> RangeSettings) {
@@ -394,5 +437,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         const val MAX_PER_REQUEST = 500
         const val MAX_SHOWN = 1_500
         const val FORECAST_MAX_AGE_MS = 60 * 60 * 1000L
+        const val REACH_DEBOUNCE_MS = 700L
+        const val REACH_REQUEST_GAP_MS = 1_100L
     }
 }

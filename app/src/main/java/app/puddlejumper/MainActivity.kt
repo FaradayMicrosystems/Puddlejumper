@@ -33,13 +33,14 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import app.puddlejumper.core.ChargerStatus
 import app.puddlejumper.core.ChargingStation
-import app.puddlejumper.core.DistanceUnit
 import app.puddlejumper.core.Forecast
 import app.puddlejumper.core.Geo
 import app.puddlejumper.core.Guidance
 import app.puddlejumper.core.NavFix
+import app.puddlejumper.core.Km
 import app.puddlejumper.core.LatLon
 import app.puddlejumper.core.Place
+import app.puddlejumper.core.ReachProfile
 import app.puddlejumper.core.Route
 import app.puddlejumper.core.WeatherFormat
 import com.google.android.material.checkbox.MaterialCheckBox
@@ -89,10 +90,10 @@ class MainActivity : AppCompatActivity() {
 
     /** Overlays this screen draws from state; replaced on every render. */
     private val drawn = mutableListOf<Overlay>()
-    private var sliderUnit: DistanceUnit? = null
     private var zoomedRoute: Route? = null
     private var suggestJob: Job? = null
     private var followOnGrant = true
+    private lateinit var updater: Updater
 
     private lateinit var voice: NavVoice
     /** GPS listener while navigating; null otherwise. */
@@ -119,7 +120,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    /** Tap and hold anywhere on the map, including inside range circles, to drop a stop. */
+    /** Tap and hold anywhere on the map, including inside range areas, to drop a stop. */
     private val mapEvents = MapEventsOverlay(object : MapEventsReceiver {
         override fun singleTapConfirmedHelper(p: GeoPoint?) = false
         override fun longPressHelper(p: GeoPoint?): Boolean {
@@ -158,6 +159,8 @@ class MainActivity : AppCompatActivity() {
         vm.setWeatherCenter(viewCenter())
         // Ask for location right away so your position becomes stop 1 without any taps.
         onMyLocation(follow = false)
+        updater = Updater(this, map)
+        if (savedInstanceState == null) updater.checkInBackground()
 
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
@@ -249,15 +252,10 @@ class MainActivity : AppCompatActivity() {
         progress.isVisible = s.loading
 
         // Range controls
-        if (sliderUnit != s.unit) {
-            sliderUnit = s.unit
-            rangeSlider.valueFrom = 25f
-            rangeSlider.valueTo = if (s.unit == DistanceUnit.MILES) 600f else 1000f
-        }
-        val v = s.unit.fromMeters(s.settings.fullRangeMeters)
+        val v = Km.fromMeters(s.settings.fullRangeMeters)
         val snapped = ((v / 5).roundToInt() * 5f).coerceIn(rangeSlider.valueFrom, rangeSlider.valueTo)
         if (rangeSlider.value != snapped) rangeSlider.value = snapped
-        rangeLabel.text = "Full-charge range: ${s.unit.format(s.settings.fullRangeMeters)}"
+        rangeLabel.text = "Full-charge range: ${Km.format(s.settings.fullRangeMeters)}"
         if (chargeEachStop.isChecked != s.settings.chargeToFullAtEachStop) {
             chargeEachStop.isChecked = s.settings.chargeToFullAtEachStop
         }
@@ -284,12 +282,12 @@ class MainActivity : AppCompatActivity() {
         val route = s.route ?: return "${s.waypoints.size} stop(s). Tap Route to plan."
         val hrs = route.durationSeconds / 3600
         val lines = mutableListOf(
-            "Total ${s.unit.format(route.distanceMeters)}, about %.1f h driving".format(hrs)
+            "Total ${Km.format(route.distanceMeters)}, about %.1f h driving".format(hrs)
         )
         s.legs.forEach { leg ->
             val flag = if (leg.reachable) "" else "  ⚠ below ${s.settings.reservePercent}% reserve"
-            lines += "Stop ${leg.legIndex + 1}→${leg.legIndex + 2}: ${s.unit.format(leg.distanceMeters)}, " +
-                "arrive with ${s.unit.format(leg.arriveRangeMeters.coerceAtLeast(0.0))}$flag"
+            lines += "Stop ${leg.legIndex + 1}→${leg.legIndex + 2}: ${Km.format(leg.distanceMeters)}, " +
+                "arrive with ${Km.format(leg.arriveRangeMeters.coerceAtLeast(0.0))}$flag"
         }
         return lines.joinToString("\n")
     }
@@ -302,22 +300,24 @@ class MainActivity : AppCompatActivity() {
         val arriveAt = s.legs.associate { it.legIndex + 1 to it.arriveRangeMeters }
 
         s.waypoints.forEachIndexed { i, wp ->
-            // Outer circle: how far you can go from this stop on a full charge.
-            drawn += circle(wp.location, s.settings.fullRangeMeters, Color.rgb(27, 127, 90), 0x221B7F5A)
+            // Road-network reach when loaded, else a straight-line circle until it arrives.
+            val reach = s.reach[wp.location]
+            // Outer area: how far you can drive from this stop on a full charge.
+            drawn += area(wp.location, s.settings.fullRangeMeters, reach, Color.rgb(27, 127, 90), 0x221B7F5A)
             // Multi-jump view: dashed rings for 2 and 3 full charges (charging to full at each hop).
             if (s.multiJumpView) {
                 for (hop in 2..3) {
-                    drawn += circle(
-                        wp.location, s.settings.fullRangeMeters * hop,
+                    drawn += area(
+                        wp.location, s.settings.fullRangeMeters * hop, reach,
                         stroke = if (hop == 2) Color.argb(200, 27, 127, 90) else Color.argb(140, 27, 127, 90),
                         fill = Color.TRANSPARENT,
                         dashed = true,
                     )
                 }
             }
-            // Inner circle: range left when you arrive here, before charging.
+            // Inner area: range left when you arrive here, before charging.
             arriveAt[i]?.takeIf { it > 0 }?.let {
-                drawn += circle(wp.location, it, Color.rgb(230, 130, 0), 0x18E68200)
+                drawn += area(wp.location, it, reach, Color.rgb(230, 130, 0), 0x18E68200)
             }
         }
 
@@ -358,7 +358,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         map.overlays.addAll(drawn)
-        // Keep the tap-and-hold handler on top so no circle or marker swallows the gesture.
+        // Keep the tap-and-hold handler on top so no range area or marker swallows the gesture.
         // Its single-tap handler returns false, so taps still reach markers underneath.
         map.overlays.remove(mapEvents)
         map.overlays.add(mapEvents)
@@ -384,19 +384,22 @@ class MainActivity : AppCompatActivity() {
             .show()
     }
 
-    private fun circle(center: LatLon, radiusM: Double, stroke: Int, fill: Int, dashed: Boolean = false) = Polygon(map).apply {
-        points = Geo.circle(center, radiusM).map { GeoPoint(it.lat, it.lon) }
+    /** Area reachable by road with [rangeM] from [center]; a straight-line circle when [reach] is null. */
+    private fun area(
+        center: LatLon, rangeM: Double, reach: ReachProfile?, stroke: Int, fill: Int, dashed: Boolean = false,
+    ) = Polygon(map).apply {
+        val ring = reach?.polygon(rangeM) ?: Geo.circle(center, rangeM)
+        points = ring.map { GeoPoint(it.lat, it.lon) }
         outlinePaint.color = stroke
         if (dashed) outlinePaint.pathEffect = DashPathEffect(floatArrayOf(24f, 16f), 0f)
         outlinePaint.strokeWidth = 4f
         fillPaint.color = fill
         infoWindow = null
-        // Let taps fall through to the map so long-press still adds stops inside a circle.
+        // Let taps fall through to the map so long-press still adds stops inside a range area.
         setOnClickListener { _, _, _ -> false }
     }
 
     private fun showCharger(st: ChargingStation) {
-        val unit = vm.state.value.unit
         val lines = buildList {
             if (st.address.isNotBlank()) add(st.address)
             st.network?.let { add("Network: $it") }
@@ -413,7 +416,7 @@ class MainActivity : AppCompatActivity() {
             st.pricing?.let { add("Pricing: $it") }
             st.lastUpdated?.let { add("Last confirmed: $it") }
             vm.state.value.waypoints.lastOrNull()?.let {
-                add("Straight-line from last stop: ${unit.format(Geo.distanceMeters(it.location, st.location))}")
+                add("Straight-line from last stop: ${Km.format(Geo.distanceMeters(it.location, st.location))}")
             }
             add("Source: ${st.source}")
         }
@@ -426,10 +429,13 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showWaypoint(index: Int, wp: Waypoint, arriveRangeM: Double?) {
-        val unit = vm.state.value.unit
         val msg = buildString {
-            append("Full-charge range circle: ${unit.format(vm.state.value.settings.fullRangeMeters)}")
-            arriveRangeM?.let { append("\nRange left on arrival: ${unit.format(it.coerceAtLeast(0.0))}") }
+            append("Full-charge range: ${Km.format(vm.state.value.settings.fullRangeMeters)}")
+            append(
+                if (wp.location in vm.state.value.reach) "\nShaded area: where that range gets you by road"
+                else "\nShaded area: straight-line estimate (road data not loaded yet)"
+            )
+            arriveRangeM?.let { append("\nRange left on arrival: ${Km.format(it.coerceAtLeast(0.0))}") }
         }
         MaterialAlertDialogBuilder(this)
             .setTitle("Stop ${index + 1}: ${wp.name}")
@@ -444,7 +450,7 @@ class MainActivity : AppCompatActivity() {
         val route = s.route ?: return Snackbar.make(map, "Plan a route first.", Snackbar.LENGTH_SHORT).show()
         val items = route.legs.flatMapIndexed { i, leg ->
             listOf("— Stop ${i + 1} to ${i + 2} —") +
-                leg.steps.map { st -> "${st.instruction}  (${s.unit.format(st.distanceMeters)})" }
+                leg.steps.map { st -> "${st.instruction}  (${Km.format(st.distanceMeters)})" }
         }
         MaterialAlertDialogBuilder(this)
             .setTitle("Directions")
@@ -469,9 +475,6 @@ class MainActivity : AppCompatActivity() {
         val prefs = vm.prefs
         val state = vm.state.value
         view.findViewById<RadioButton>(
-            if (state.unit == DistanceUnit.MILES) R.id.unitMiles else R.id.unitKm
-        ).isChecked = true
-        view.findViewById<RadioButton>(
             if (prefs.chargerSource == ChargerSourceType.NREL) R.id.sourceNrel else R.id.sourceOcm
         ).isChecked = true
         val reserveLabel = view.findViewById<TextView>(R.id.reserveLabel)
@@ -479,12 +482,12 @@ class MainActivity : AppCompatActivity() {
         reserve.value = (state.settings.reservePercent / 5 * 5).toFloat().coerceIn(0f, 50f)
         reserveLabel.text = "Arrival reserve: ${reserve.value.toInt()}%"
         reserve.addOnChangeListener { _, v, _ -> reserveLabel.text = "Arrival reserve: ${v.toInt()}%" }
+        view.findViewById<TextView>(R.id.versionLabel).text = "Installed: v${BuildConfig.VERSION_NAME}"
 
-        MaterialAlertDialogBuilder(this)
+        val dialog = MaterialAlertDialogBuilder(this)
             .setTitle(R.string.settings)
             .setView(view)
             .setPositiveButton("Save") { _, _ ->
-                vm.setUnit(if (view.findViewById<RadioButton>(R.id.unitKm).isChecked) DistanceUnit.KILOMETERS else DistanceUnit.MILES)
                 vm.setReservePercent(reserve.value.toInt())
                 prefs.chargerSource =
                     if (view.findViewById<RadioButton>(R.id.sourceOcm).isChecked) ChargerSourceType.OPEN_CHARGE_MAP
@@ -492,6 +495,10 @@ class MainActivity : AppCompatActivity() {
             }
             .setNegativeButton("Cancel", null)
             .show()
+        view.findViewById<Button>(R.id.checkUpdates).setOnClickListener {
+            dialog.dismiss()
+            updater.checkNow()
+        }
     }
 
     private fun onMyLocation(follow: Boolean = true) {

@@ -1,7 +1,9 @@
 package app.puddlejumper
 
 import android.content.Context
-import app.puddlejumper.core.DistanceUnit
+import app.puddlejumper.core.LatLon
+import org.json.JSONArray
+import org.json.JSONObject
 
 enum class ChargerSourceType { NREL, OPEN_CHARGE_MAP }
 
@@ -32,11 +34,6 @@ class Prefs(context: Context) {
         get() = sp.getBoolean("voiceMuted", false)
         set(v) = sp.edit().putBoolean("voiceMuted", v).apply()
 
-    var unit: DistanceUnit
-        // Metric by default. New key so builds that defaulted to miles don't carry that choice over.
-        get() = runCatching { DistanceUnit.valueOf(sp.getString("distanceUnit", null)!!) }.getOrDefault(DistanceUnit.KILOMETERS)
-        set(v) = sp.edit().putString("distanceUnit", v.name).apply()
-
     var chargerSource: ChargerSourceType
         // Open Charge Map by default when the build has its key, otherwise NREL.
         get() = runCatching { ChargerSourceType.valueOf(sp.getString("chargerSource", null)!!) }
@@ -45,7 +42,27 @@ class Prefs(context: Context) {
             )
         set(v) = sp.edit().putString("chargerSource", v.name).apply()
 
+    /**
+     * Stops the user added, saved so the route survives closing the app.
+     * "My location" is not saved: it is re-added from GPS on the next start.
+     */
+    var savedStops: List<Waypoint>
+        get() = runCatching {
+            val arr = JSONArray(sp.getString("savedStops", "[]"))
+            (0 until arr.length()).map { i ->
+                val o = arr.getJSONObject(i)
+                Waypoint(o.getString("name"), LatLon(o.getDouble("lat"), o.getDouble("lon")))
+            }
+        }.getOrDefault(emptyList())
+        set(v) {
+            val arr = JSONArray()
+            v.filterNot { it.isCurrentLocation }.forEach {
+                arr.put(JSONObject().put("name", it.name).put("lat", it.location.lat).put("lon", it.location.lon))
+            }
+            sp.edit().putString("savedStops", arr.toString()).apply()
+        }
+
     /** API keys are built into the app (see app/build.gradle.kts); there is no Settings field for them. */
-    val nrelKey: String get() = BuildConfig.NREL_API_KEY
+    val nrelKey: String get() = BuildConfig.NREL_API_KEY.ifBlank { "DEMO_KEY" }
     val ocmKey: String get() = BuildConfig.OCM_API_KEY
 }

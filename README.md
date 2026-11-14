@@ -1,15 +1,17 @@
 # Puddlejumper
 
-Android navigation prototype for electric vehicles. Every stop on the map shows a circle for your
-car's full-charge range, so you can see at a glance how far you can get from each hop.
+Android navigation prototype for electric vehicles. Every stop on the map shows the area your
+car's full-charge range reaches by road, so you can see at a glance how far you can get from each hop.
 
 ## What works in this first version
 
 - OpenStreetMap map with pinch zoom. Your current location becomes stop 1 automatically.
 - Add stops by tapping and holding anywhere on the map (the pin is named by its street address), searching a place, or tapping a charger and choosing **Add as stop**.
-- **Range circles** at every stop:
-  - Green circle: the distance you can drive from that stop on a full charge (set with the slider).
-  - Orange circle: range left when you arrive at that stop (shown after you tap **Route**).
+- **Range areas** at every stop, measured along real roads (not a straight-line circle):
+  - Green area: where you can drive from that stop on a full charge (set with the slider).
+  - Orange area: where the range left on arrival gets you (shown after you tap **Route**).
+  - Each stop first shows a straight-line circle, then reshapes to the road area within a few seconds.
+    It stays a circle if the road lookup fails (offline). Tap a stop to see which one you are looking at.
 - **Multi-jump view** tick box: dashed rings at 2 and 3 full charges around each stop (up to 3 hops).
 - **Route**: driving route through all stops, total distance and time, and range on arrival per leg.
   Legs that drop below your reserve are marked with ⚠.
@@ -18,7 +20,11 @@ car's full-charge range, so you can see at a glance how far you can get from eac
   speed (DC fast / Level 2 / Level 1, kW where known), ports, connectors, network, status
   (operational, down / maintenance, planned), hours, pricing, and last-confirmed date.
 - **Steps**: turn-by-turn directions as a list.
-- Settings: km (default) or miles, arrival reserve %, charger data source.
+- **Weather** tick box: a badge above every stop and at the map centre shows the next 3 days
+  (symbol and high/low °C). Tap a badge for the full 5-day forecast: conditions, °C, rain in mm
+  with chance, and maximum wind in km/h.
+- Your stops are saved and come back when you reopen the app. **Clear** removes them.
+- Settings: arrival reserve %, charger data source. All distances are in km.
 
 Marker legend: purple **F** = DC fast, blue **2** = Level 2, light blue **1** = Level 1,
 red = down or under maintenance, gray = planned, orange = in use (live sources only).
@@ -30,7 +36,7 @@ red = down or under maintenance, gray = planned, orange = in use (live sources o
 | Map tiles | OpenStreetMap | No key. Fine for testing, not for a published app. |
 | Routing | OSRM public demo server | No key. Testing only. |
 | Search suggestions | Photon (OSM) | No key. |
-| Weather (5-day forecast) | Open-Meteo | No key. Metric (°C, mm, km/h). |
+| Weather (3-day badges, 5-day detail) | Open-Meteo | No key. Metric (°C, mm, km/h). |
 | Search on Enter, pin names | Nominatim (OSM) | No key. Max 1 request per second. |
 | Chargers | NREL AFDC (US and Canada) | Works with `DEMO_KEY` (low hourly limit). Free key at developer.nrel.gov. |
 | Chargers (default when keyed) | Open Charge Map (worldwide) | Key from the `OCM_API_KEY` secret, never in the code. |
@@ -44,7 +50,16 @@ availability, add PlugShare (licensed) or TomTom EV Charging Stations Availabili
 
 1. Install Android Studio (it includes the Android SDK and JDK 17+).
 2. Open this folder in Android Studio and let Gradle sync.
-3. Optional: add keys to `local.properties` (this file is not committed):
+3. Optional: get a free NREL key (US and Canada chargers). Without one, the app uses the shared
+   `DEMO_KEY`, which allows only a few requests per hour for everyone together.
+   1. Go to https://developer.nrel.gov/signup/ and enter your name and email address.
+   2. The key is shown on the page and sent by email (a 40-character code).
+   3. On GitHub, open the repository > **Settings** > **Secrets and variables** > **Actions** >
+      **New repository secret**. Name: `NREL_API_KEY`. Secret: the key. Save.
+   4. Start a new build (push to main, or **Actions** > **Android build** > **Run workflow**).
+      The build checks the key with NREL first and stops with an error if NREL rejects it.
+      The release notes then say "NREL built in".
+4. Optional: add keys to `local.properties` (this file is not committed):
    ```
    NREL_API_KEY=your_nrel_key
    OCM_API_KEY=your_open_charge_map_key
@@ -52,7 +67,7 @@ availability, add PlugShare (licensed) or TomTom EV Charging Stations Availabili
    For the GitHub-built APK, add them as repository secrets named `NREL_API_KEY` and `OCM_API_KEY`
    (Settings > Secrets and variables > Actions). Keys built into an APK can be extracted from it,
    so use only free keys here.
-4. Run the `app` configuration on a phone or emulator (Android 8.0 / API 26 or newer).
+5. Run the `app` configuration on a phone or emulator (Android 8.0 / API 26 or newer).
 
 Command line: `./gradlew :app:assembleDebug` (APK in `app/build/outputs/apk/debug/`),
 and `./gradlew :core:test` for the unit tests.
@@ -63,14 +78,27 @@ and `./gradlew :core:test` for the unit tests.
 - Versioned releases: raise `versionName` in `app/build.gradle.kts`, add a `## vX.Y` section to
   `CHANGELOG.md`, and push to main. The build publishes "Puddlejumper vX.Y" with the APK.
 
+## In-app updates
+
+At launch the app checks the versioned GitHub releases. If one is newer than the installed version,
+a bar offers **Update** (also in Settings > **Check for updates**). The app downloads the APK and
+Android installs it over the current app, so settings are kept. The "latest" pre-release is not offered.
+
+This needs every build signed with the same key. The key lives in two repository secrets,
+`PUDDLEJUMPER_KEYSTORE_B64` (base64 of a PKCS12 keystore with alias `puddlejumper`) and
+`PUDDLEJUMPER_KEY_PASSWORD`. Without them the build still works, but cannot install over an
+existing copy. Keep a backup of the key: if it is lost, every phone must uninstall once to move to a new key.
+
 ## Project layout
 
-- `core/` — plain Kotlin, no Android: range math, geodesic circles, route and charger parsing. Unit-tested.
+- `core/` — plain Kotlin, no Android: range math, road-network range areas, route and charger parsing. Unit-tested.
 - `app/` — Android app: map screen, overlays, settings.
 
 ## Next steps
 
 - Real turn-by-turn guidance (voice, rerouting, traffic): move the map and routing to the
-  Mapbox Navigation SDK v3. Range circles and charger markers keep working through `core/`.
+  Mapbox Navigation SDK v3. Range areas and charger markers keep working through `core/`.
 - Live charger availability: PlugShare license or TomTom.
-- Range circles are straight-line distance. A road-network "reachable area" (isochrone) is more accurate.
+- Range areas sample 64 points per stop with one OSRM `table` request (public demo server). They are an
+  estimate between samples; for production, use your own OSRM server or the Mapbox Matrix API
+  (Mapbox's Isochrone API stops at 100 km, too short for EV range).
