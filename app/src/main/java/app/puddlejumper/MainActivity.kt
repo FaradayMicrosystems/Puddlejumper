@@ -4,11 +4,8 @@ import android.Manifest
 import android.content.pm.PackageManager
 import android.graphics.Color
 import android.graphics.DashPathEffect
-import android.location.Location
-import android.location.LocationListener
-import android.location.LocationManager
+import android.os.Build
 import android.os.Bundle
-import android.os.Looper
 import android.view.View
 import android.view.WindowManager
 import android.view.HapticFeedbackConstants
@@ -36,7 +33,6 @@ import app.puddlejumper.core.ChargingStation
 import app.puddlejumper.core.Forecast
 import app.puddlejumper.core.Geo
 import app.puddlejumper.core.Guidance
-import app.puddlejumper.core.NavFix
 import app.puddlejumper.core.Km
 import app.puddlejumper.core.LatLon
 import app.puddlejumper.core.Place
@@ -95,9 +91,8 @@ class MainActivity : AppCompatActivity() {
     private var followOnGrant = true
     private lateinit var updater: Updater
 
-    private lateinit var voice: NavVoice
-    /** GPS listener while navigating; null otherwise. */
-    private var navListener: LocationListener? = null
+    /** True while this screen shows navigation (map zoomed in and following the car). */
+    private var navScreen = false
 
     /** Shows whatever suggestions were fetched last; the server already matched them, so no local filtering. */
     private inner class SuggestionAdapter :
@@ -153,7 +148,6 @@ class MainActivity : AppCompatActivity() {
         summary = findViewById(R.id.summary)
         progress = findViewById(R.id.progress)
 
-        voice = NavVoice(this)
         setUpMap()
         setUpControls()
         vm.setWeatherCenter(viewCenter())
@@ -166,10 +160,6 @@ class MainActivity : AppCompatActivity() {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 vm.state.collect { render(it) }
             }
-        }
-        // Prompts keep playing while the screen is covered, so collect for the activity's whole life.
-        lifecycleScope.launch {
-            vm.speech.collect { text -> if (vm.state.value.nav?.muted == false) voice.say(text) }
         }
     }
 
@@ -238,7 +228,6 @@ class MainActivity : AppCompatActivity() {
         findViewById<Button>(R.id.navEnd).setOnClickListener { vm.stopNavigation() }
         findViewById<ImageButton>(R.id.navMute).setOnClickListener {
             val muted = vm.state.value.nav?.muted ?: return@setOnClickListener
-            if (!muted) voice.stop()
             vm.setVoiceMuted(!muted)
         }
         findViewById<Button>(R.id.chargersButton).setOnClickListener {
@@ -573,10 +562,18 @@ class MainActivity : AppCompatActivity() {
             locationPermission.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
             return
         }
+        // Android 13+: the next-turn notification needs permission. Guidance works without it.
+        if (Build.VERSION.SDK_INT >= 33 &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
         vm.startNavigation()
     }
 
-    /** Shows or hides the navigation screen and starts or stops GPS updates to match the state. */
+    private val notificationPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
+
+    /** Shows or hides the navigation screen. GPS and voice run in [NavigationService]. */
     private fun renderNav(s: UiState) {
         val nav = s.nav
         val navigating = nav != null
@@ -587,10 +584,16 @@ class MainActivity : AppCompatActivity() {
         findViewById<View>(R.id.myLocation).isVisible = !navigating
 
         if (nav == null) {
-            if (navListener != null) stopNavUpdates()
+            if (navScreen) leaveNavScreen()
             return
         }
-        if (navListener == null) startNavUpdates()
+        if (!navScreen) enterNavScreen()
+        // Follow the car, heading up once it is moving.
+        nav.position?.let { pos ->
+            val at = nav.progress?.takeIf { !it.offRoute }?.snapped ?: pos
+            map.controller.animateTo(GeoPoint(at.lat, at.lon))
+        }
+        nav.headingDeg?.let { map.mapOrientation = -it.toFloat() }
 
         findViewById<ImageButton>(R.id.navMute).setImageResource(
             if (nav.muted) android.R.drawable.ic_lock_silent_mode else android.R.drawable.ic_lock_silent_mode_off
@@ -640,60 +643,18 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    @android.annotation.SuppressLint("MissingPermission") // checked in startNavigation()
-    private fun startNavUpdates() {
-        if (!hasLocationPermission()) return vm.stopNavigation()
-        val lm = getSystemService(LocationManager::class.java)
-        // A full object, not a lambda: before Android 11 the other callbacks have no default and would crash.
-        val listener = object : LocationListener {
-            override fun onLocationChanged(location: Location) = onNavLocation(location)
-            override fun onProviderEnabled(provider: String) {}
-            override fun onProviderDisabled(provider: String) {
-                Snackbar.make(map, "GPS is off. Turn on location to keep guiding.", Snackbar.LENGTH_LONG).show()
-            }
-            @Deprecated("Deprecated in Java")
-            override fun onStatusChanged(provider: String?, status: Int, extras: Bundle?) {}
-        }
-        navListener = listener
-        lm.requestLocationUpdates(LocationManager.GPS_PROVIDER, 1_000L, 0f, listener, Looper.getMainLooper())
-        lm.getLastKnownLocation(LocationManager.GPS_PROVIDER)?.let { onNavLocation(it) }
+    private fun enterNavScreen() {
+        navScreen = true
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         locationOverlay?.disableFollowLocation()
         map.controller.setZoom(17.0)
     }
 
-    private fun stopNavUpdates() {
-        navListener?.let { getSystemService(LocationManager::class.java).removeUpdates(it) }
-        navListener = null
-        voice.stop()
+    private fun leaveNavScreen() {
+        navScreen = false
         window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         map.mapOrientation = 0f
         map.controller.setZoom(13.0)
-    }
-
-    private fun onNavLocation(loc: Location) {
-        vm.onNavFix(
-            NavFix(
-                location = LatLon(loc.latitude, loc.longitude),
-                timeMs = System.currentTimeMillis(),
-                accuracyM = if (loc.hasAccuracy()) loc.accuracy.toDouble() else 30.0,
-                bearingDeg = if (loc.hasBearing()) loc.bearing.toDouble() else null,
-                speedMps = if (loc.hasSpeed()) loc.speed.toDouble() else null,
-            )
-        )
-        // Follow the car, heading up once it is moving.
-        val at = vm.state.value.nav?.progress?.takeIf { !it.offRoute }?.snapped ?: LatLon(loc.latitude, loc.longitude)
-        map.controller.animateTo(GeoPoint(at.lat, at.lon))
-        if (loc.hasBearing() && loc.hasSpeed() && loc.speed > 2f) map.mapOrientation = -loc.bearing
-    }
-
-    override fun onDestroy() {
-        if (navListener != null) {
-            navListener?.let { getSystemService(LocationManager::class.java).removeUpdates(it) }
-            navListener = null
-        }
-        voice.shutdown()
-        super.onDestroy()
     }
 
     override fun onResume() {

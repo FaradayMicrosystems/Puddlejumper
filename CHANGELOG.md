@@ -10,6 +10,8 @@
 - Routes come from Mapbox (live traffic for trips with up to 3 stops) when the build has the
   `MAPBOX_ACCESS_TOKEN` repository secret. Without it, the OSRM test server is still used.
 - The screen stays on while navigating.
+- Guidance keeps going with the screen off or another app open: voice prompts continue and a notification
+  shows the next turn and km left. Tap it to return to the map; its End button stops navigation.
 
 ## v0.6.9 — 2026-11-14
 
