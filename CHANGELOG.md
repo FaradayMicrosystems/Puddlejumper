@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Removed the Miles option from Settings. All distances are in km only.
+
 ## v0.6.5 — 2026-10-28
 
 - Weather badges now show 3 days in short form (symbol and high/low °C for each day).

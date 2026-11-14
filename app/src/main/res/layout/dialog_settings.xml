@@ -6,34 +6,9 @@
     android:padding="20dp">
 
     <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="Distance units" />
-
-    <RadioGroup
-        android:id="@+id/units"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal">
-
-        <RadioButton
-            android:id="@+id/unitKm"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Kilometers" />
-
-        <RadioButton
-            android:id="@+id/unitMiles"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Miles" />
-    </RadioGroup>
-
-    <TextView
         android:id="@+id/reserveLabel"
         android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="12dp" />
+        android:layout_height="wrap_content" />
 
     <com.google.android.material.slider.Slider
         android:id="@+id/reserveSlider"

@@ -32,7 +32,8 @@ class RangePlannerTest {
     }
 
     @Test fun unitConversion() {
-        assertEquals(1609.344 * 250, DistanceUnit.MILES.toMeters(250.0), 1e-6)
-        assertEquals("250 mi", DistanceUnit.MILES.format(1609.344 * 250))
+        assertEquals(250_000.0, Km.toMeters(250.0), 1e-6)
+        assertEquals(250.0, Km.fromMeters(250_000.0), 1e-6)
+        assertEquals("250 km", Km.format(250_000.0))
     }
 }

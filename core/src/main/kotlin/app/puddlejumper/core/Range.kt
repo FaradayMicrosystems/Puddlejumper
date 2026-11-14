@@ -1,12 +1,10 @@
 package app.puddlejumper.core
 
-enum class DistanceUnit(val metersPerUnit: Double, val label: String) {
-    MILES(1609.344, "mi"),
-    KILOMETERS(1000.0, "km");
-
-    fun toMeters(value: Double) = value * metersPerUnit
-    fun fromMeters(meters: Double) = meters / metersPerUnit
-    fun format(meters: Double) = "%.0f %s".format(fromMeters(meters), label)
+/** The app shows distances in kilometres only. */
+object Km {
+    fun toMeters(km: Double) = km * 1000.0
+    fun fromMeters(meters: Double) = meters / 1000.0
+    fun format(meters: Double) = "%.0f km".format(fromMeters(meters))
 }
 
 /**
