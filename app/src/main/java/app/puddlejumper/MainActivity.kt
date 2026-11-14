@@ -32,6 +32,7 @@ import app.puddlejumper.core.Geo
 import app.puddlejumper.core.Km
 import app.puddlejumper.core.LatLon
 import app.puddlejumper.core.Place
+import app.puddlejumper.core.ReachProfile
 import app.puddlejumper.core.Route
 import app.puddlejumper.core.WeatherFormat
 import com.google.android.material.checkbox.MaterialCheckBox
@@ -105,7 +106,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    /** Tap and hold anywhere on the map, including inside range circles, to drop a stop. */
+    /** Tap and hold anywhere on the map, including inside range areas, to drop a stop. */
     private val mapEvents = MapEventsOverlay(object : MapEventsReceiver {
         override fun singleTapConfirmedHelper(p: GeoPoint?) = false
         override fun longPressHelper(p: GeoPoint?): Boolean {
@@ -269,22 +270,24 @@ class MainActivity : AppCompatActivity() {
         val arriveAt = s.legs.associate { it.legIndex + 1 to it.arriveRangeMeters }
 
         s.waypoints.forEachIndexed { i, wp ->
-            // Outer circle: how far you can go from this stop on a full charge.
-            drawn += circle(wp.location, s.settings.fullRangeMeters, Color.rgb(27, 127, 90), 0x221B7F5A)
+            // Road-network reach when loaded, else a straight-line circle until it arrives.
+            val reach = s.reach[wp.location]
+            // Outer area: how far you can drive from this stop on a full charge.
+            drawn += area(wp.location, s.settings.fullRangeMeters, reach, Color.rgb(27, 127, 90), 0x221B7F5A)
             // Multi-jump view: dashed rings for 2 and 3 full charges (charging to full at each hop).
             if (s.multiJumpView) {
                 for (hop in 2..3) {
-                    drawn += circle(
-                        wp.location, s.settings.fullRangeMeters * hop,
+                    drawn += area(
+                        wp.location, s.settings.fullRangeMeters * hop, reach,
                         stroke = if (hop == 2) Color.argb(200, 27, 127, 90) else Color.argb(140, 27, 127, 90),
                         fill = Color.TRANSPARENT,
                         dashed = true,
                     )
                 }
             }
-            // Inner circle: range left when you arrive here, before charging.
+            // Inner area: range left when you arrive here, before charging.
             arriveAt[i]?.takeIf { it > 0 }?.let {
-                drawn += circle(wp.location, it, Color.rgb(230, 130, 0), 0x18E68200)
+                drawn += area(wp.location, it, reach, Color.rgb(230, 130, 0), 0x18E68200)
             }
         }
 
@@ -324,7 +327,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         map.overlays.addAll(drawn)
-        // Keep the tap-and-hold handler on top so no circle or marker swallows the gesture.
+        // Keep the tap-and-hold handler on top so no range area or marker swallows the gesture.
         // Its single-tap handler returns false, so taps still reach markers underneath.
         map.overlays.remove(mapEvents)
         map.overlays.add(mapEvents)
@@ -350,14 +353,18 @@ class MainActivity : AppCompatActivity() {
             .show()
     }
 
-    private fun circle(center: LatLon, radiusM: Double, stroke: Int, fill: Int, dashed: Boolean = false) = Polygon(map).apply {
-        points = Geo.circle(center, radiusM).map { GeoPoint(it.lat, it.lon) }
+    /** Area reachable by road with [rangeM] from [center]; a straight-line circle when [reach] is null. */
+    private fun area(
+        center: LatLon, rangeM: Double, reach: ReachProfile?, stroke: Int, fill: Int, dashed: Boolean = false,
+    ) = Polygon(map).apply {
+        val ring = reach?.polygon(rangeM) ?: Geo.circle(center, rangeM)
+        points = ring.map { GeoPoint(it.lat, it.lon) }
         outlinePaint.color = stroke
         if (dashed) outlinePaint.pathEffect = DashPathEffect(floatArrayOf(24f, 16f), 0f)
         outlinePaint.strokeWidth = 4f
         fillPaint.color = fill
         infoWindow = null
-        // Let taps fall through to the map so long-press still adds stops inside a circle.
+        // Let taps fall through to the map so long-press still adds stops inside a range area.
         setOnClickListener { _, _, _ -> false }
     }
 
@@ -392,7 +399,11 @@ class MainActivity : AppCompatActivity() {
 
     private fun showWaypoint(index: Int, wp: Waypoint, arriveRangeM: Double?) {
         val msg = buildString {
-            append("Full-charge range circle: ${Km.format(vm.state.value.settings.fullRangeMeters)}")
+            append("Full-charge range: ${Km.format(vm.state.value.settings.fullRangeMeters)}")
+            append(
+                if (wp.location in vm.state.value.reach) "\nShaded area: where that range gets you by road"
+                else "\nShaded area: straight-line estimate (road data not loaded yet)"
+            )
             arriveRangeM?.let { append("\nRange left on arrival: ${Km.format(it.coerceAtLeast(0.0))}") }
         }
         MaterialAlertDialogBuilder(this)

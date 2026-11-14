@@ -18,13 +18,17 @@ import app.puddlejumper.core.PhotonGeocoder
 import app.puddlejumper.core.Place
 import app.puddlejumper.core.RangePlanner
 import app.puddlejumper.core.RangeSettings
+import app.puddlejumper.core.ReachProfile
+import app.puddlejumper.core.RoadReachSampler
 import app.puddlejumper.core.Route
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
@@ -48,6 +52,11 @@ data class UiState(
     val centerForecast: Forecast? = null,
     /** Forecasts at stops, keyed by the stop's position. */
     val stopForecasts: Map<LatLon, Forecast> = emptyMap(),
+    /**
+     * Road-network reach around each stop, keyed by the stop's position. A stop without one
+     * (still loading, offline) falls back to a straight-line circle.
+     */
+    val reach: Map<LatLon, ReachProfile> = emptyMap(),
     val loading: Boolean = false,
     /** One-shot message for a snackbar; cleared by [MainViewModel.messageShown]. */
     val message: String? = null,
@@ -174,8 +183,41 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    // Declared after the weather fields it uses, so they exist when it first runs.
+    private val reachSampler = RoadReachSampler()
+
+    /**
+     * Fetches road-network reach for stops that have none, or whose profile was sampled for a range more
+     * than 25% away from the current one. Smaller slider moves just rescale the existing profile.
+     * One request per stop, spaced out to respect the public OSRM server's usage policy.
+     */
+    private suspend fun refreshReach(stops: List<LatLon>, rangeM: Double) {
+        _state.update { s -> s.copy(reach = s.reach.filterKeys { it in stops }) }
+        for (p in stops.distinct()) {
+            if (_state.value.reach[p]?.fits(rangeM) == true) continue
+            val profile = try {
+                reachSampler.parse(Http.get(reachSampler.tableUrl(p, rangeM)), p, rangeM)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                null // keep the circle (or the older profile) for this stop
+            }
+            if (profile != null) _state.update { s -> s.copy(reach = s.reach + (p to profile)) }
+            delay(REACH_REQUEST_GAP_MS)
+        }
+    }
+
+    // Declared after the weather and reach fields it uses, so they exist when it first runs.
     init {
+        // Stops or range changed: refresh road reach. collectLatest drops work for stale input,
+        // and the short wait lets the range slider settle before any request goes out.
+        viewModelScope.launch {
+            _state.map { it.waypoints.map { w -> w.location } to it.settings.fullRangeMeters }
+                .distinctUntilChanged()
+                .collectLatest { (stops, range) ->
+                    delay(REACH_DEBOUNCE_MS)
+                    refreshReach(stops, range)
+                }
+        }
         // Save stops whenever they change, so they are still there after the app is closed.
         viewModelScope.launch {
             _state.map { it.waypoints }
@@ -295,5 +337,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         const val MAX_PER_REQUEST = 500
         const val MAX_SHOWN = 1_500
         const val FORECAST_MAX_AGE_MS = 60 * 60 * 1000L
+        const val REACH_DEBOUNCE_MS = 700L
+        const val REACH_REQUEST_GAP_MS = 1_100L
     }
 }
