@@ -1,10 +1,19 @@
 # Changelog
 
-## v0.6.6 — 2026-11-14
+## v0.6.7 — 2026-11-14
 
 - Your stops are saved and come back after the app is closed. "My location" is still added from GPS.
 - GitHub builds check the NREL key (if the `NREL_API_KEY` secret is set) and stop if NREL rejects it.
 - README: steps to get a free NREL key and add it; weather section describes the 3-day badges and 5-day detail.
+
+## v0.6.6 — 2026-10-29
+
+- In-app updates: when a newer version is released, a bar at the bottom offers **Update**.
+  Settings also has **Check for updates**. Puddlejumper downloads the new APK and Android installs
+  it over the current app, keeping your settings. Android asks once to allow Puddlejumper to install apps.
+- Every build is now signed with one fixed key, so new versions install over old ones.
+- One-time step: uninstall your current Puddlejumper before installing v0.6.6 (older builds used a
+  different key). From v0.6.6 on, updates install directly.
 
 ## v0.6.5 — 2026-10-28
 
