@@ -9,10 +9,13 @@ import android.speech.tts.UtteranceProgressListener
 import java.util.Locale
 
 /**
- * Speaks navigation prompts with Android's built-in text-to-speech (no account or key needed).
- * Music and podcasts are turned down while a prompt plays.
+ * Speaks navigation prompts: the built-in Scottish voice ([NeuralVoice]) unless Settings picks the phone's own
+ * voice, or the Scottish voice can't load. Music and podcasts are turned down while a prompt plays.
  */
 class NavVoice(context: Context) {
+    private val appContext = context.applicationContext
+    private val prefs = Prefs(appContext)
+
     private val audio = context.getSystemService(AudioManager::class.java)
     private val attributes = AudioAttributes.Builder()
         .setUsage(AudioAttributes.USAGE_ASSISTANCE_NAVIGATION_GUIDANCE)
@@ -58,8 +61,21 @@ class NavVoice(context: Context) {
         if (playing == 0) audio.abandonAudioFocusRequest(focus)
     }
 
+    init {
+        if (prefs.navVoice != Prefs.PHONE_VOICE) NeuralVoice.warmUp(appContext)
+    }
+
     fun say(text: String) {
         if (muted) return
+        val voiceId = prefs.navVoice
+        if (voiceId != Prefs.PHONE_VOICE) {
+            synchronized(this) {
+                if (playing == 0) audio.requestAudioFocus(focus)
+                playing++
+            }
+            if (NeuralVoice.speak(appContext, text, voiceId, attributes, onDone = ::finished)) return
+            finished() // model unavailable: fall through to the phone's voice
+        }
         if (!ready) { pending += text; return }
         synchronized(this) {
             if (playing == 0) audio.requestAudioFocus(focus)
@@ -70,6 +86,7 @@ class NavVoice(context: Context) {
 
     fun stop() {
         pending.clear()
+        NeuralVoice.stop()
         tts.stop()
         synchronized(this) { playing = 0 }
         audio.abandonAudioFocusRequest(focus)

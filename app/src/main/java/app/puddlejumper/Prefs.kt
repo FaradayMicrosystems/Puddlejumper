@@ -55,6 +55,11 @@ class Prefs(context: Context) {
         get() = sp.getBoolean("voiceMuted", false)
         set(v) = sp.edit().putBoolean("voiceMuted", v).apply()
 
+    /** Navigation voice: a [NeuralVoice] speaker id, or [PHONE_VOICE] for Android's own text-to-speech. */
+    var navVoice: String
+        get() = sp.getString("navVoice", null) ?: NeuralVoice.DEFAULT_ID
+        set(v) = sp.edit().putString("navVoice", v).apply()
+
     var chargerSource: ChargerSourceType
         // Open Charge Map by default when the build has its key, otherwise NREL.
         get() = runCatching { ChargerSourceType.valueOf(sp.getString("chargerSource", null)!!) }
@@ -86,4 +91,8 @@ class Prefs(context: Context) {
     /** API keys are built into the app (see app/build.gradle.kts); there is no Settings field for them. */
     val nrelKey: String get() = BuildConfig.NREL_API_KEY.ifBlank { "DEMO_KEY" }
     val ocmKey: String get() = BuildConfig.OCM_API_KEY
+
+    companion object {
+        const val PHONE_VOICE = "phone"
+    }
 }

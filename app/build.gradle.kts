@@ -24,15 +24,20 @@ android {
         applicationId = "app.puddlejumper"
         minSdk = 26
         targetSdk = 35
-        versionCode = 18
-        versionName = "0.7.1"
+        versionCode = 19
+        versionName = "0.7.2"
         buildConfigField("String", "NREL_API_KEY", key("NREL_API_KEY", "DEMO_KEY"))
         // Never commit keys here: they come from local.properties or the CI secret.
         buildConfigField("String", "OCM_API_KEY", key("OCM_API_KEY"))
         buildConfigField("String", "MAPBOX_ACCESS_TOKEN", key("MAPBOX_ACCESS_TOKEN"))
         // In-app updates look for newer versioned releases here.
         buildConfigField("String", "UPDATE_REPO", "\"FaradayMicrosystems/Puddlejumper\"")
+        // The offline voice engine is native code; ship only phone CPUs to keep the APK smaller.
+        ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
     }
+
+    // The voice model is loaded straight from the APK; storing it uncompressed avoids unpacking 77 MB.
+    androidResources { noCompress += listOf("onnx") }
 
     // Fixed key from GitHub secrets so each build installs over the last one
     // (Android refuses updates signed with a different key; uninstalling deletes settings).
@@ -66,8 +71,15 @@ android {
 
 kotlin { compilerOptions { jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17) } }
 
+// Offline Scottish voice: engine and model are downloaded by scripts/fetch-voice.sh (too big for git).
+val voiceEngine = file("libs/sherpa-onnx-1.13.7.aar")
+if (!voiceEngine.exists()) {
+    throw GradleException("Voice engine missing. Run scripts/fetch-voice.sh once, then build again.")
+}
+
 dependencies {
     implementation(project(":core"))
+    implementation(files(voiceEngine))
     implementation("androidx.core:core-ktx:1.15.0")
     implementation("androidx.appcompat:appcompat:1.7.0")
     implementation("androidx.activity:activity-ktx:1.9.3")
