@@ -76,6 +76,17 @@ jobs:
           echo "SIGN_STATUS=Signing: fixed Puddlejumper key (installs over v0.6.6 and later)." >> "$GITHUB_ENV"
           echo "Signing key loaded."
 
+      # Fails the build early if the NREL key is set but rejected (a wrong key would make chargers fail in the app).
+      - name: Check NREL key
+        env:
+          NREL_API_KEY: ${{ secrets.NREL_API_KEY }}
+        run: |
+          if [ -z "$NREL_API_KEY" ]; then echo "No NREL_API_KEY secret; the app uses DEMO_KEY"; exit 0; fi
+          CODE=$(curl -s -o nrel.json -w '%{http_code}' \
+            "https://developer.nrel.gov/api/alt-fuel-stations/v1/nearest.json?api_key=$NREL_API_KEY&fuel_type=ELEC&latitude=39.74&longitude=-104.99&radius=5&limit=1")
+          echo "NREL answered HTTP $CODE: $(head -c 200 nrel.json)"
+          [ "$CODE" = "200" ]
+
       - name: Unit tests
         run: ./gradlew :core:test --stacktrace
 
