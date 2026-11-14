@@ -1,6 +1,6 @@
 # Changelog
 
-## v0.8.0 — 2026-11-14
+## v0.7.1 — 2026-11-14
 
 - Range tree replaces the range areas around stops. Yellow roads grow out from your location in 24
   directions, each drawn as far as your battery (above the reserve) gets you. It follows your location
