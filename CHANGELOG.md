@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+- Turn-by-turn navigation: plan a route, then tap Start. A banner shows the next turn with an arrow and the
+  distance in m/km; the bar below shows km and time left, arrival time and the next stop.
+- Voice guidance with Android's built-in text-to-speech, metric only. Music is turned down while it speaks.
+  The speaker button mutes it.
+- Automatic rerouting: leave the route and a new one is fetched from where you are to the stops you haven't reached.
+- Routes come from Mapbox (live traffic for trips with up to 3 stops) when the build has the
+  `MAPBOX_ACCESS_TOKEN` repository secret. Without it, the OSRM test server is still used.
+- The screen stays on while navigating.
+
 ## v0.6.5 — 2026-10-28
 
 - Weather badges now show 3 days in short form (symbol and high/low °C for each day).

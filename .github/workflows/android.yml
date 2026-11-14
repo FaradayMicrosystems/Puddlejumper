@@ -26,14 +26,17 @@ jobs:
         env:
           NREL_API_KEY: ${{ secrets.NREL_API_KEY }}
           OCM_API_KEY: ${{ secrets.OCM_API_KEY }}
+          MAPBOX_ACCESS_TOKEN: ${{ secrets.MAPBOX_ACCESS_TOKEN }}
         run: |
           : > local.properties
           if [ -n "$NREL_API_KEY" ]; then echo "NREL_API_KEY=$NREL_API_KEY" >> local.properties; fi
           if [ -n "$OCM_API_KEY" ]; then echo "OCM_API_KEY=$OCM_API_KEY" >> local.properties; fi
+          if [ -n "$MAPBOX_ACCESS_TOKEN" ]; then echo "MAPBOX_ACCESS_TOKEN=$MAPBOX_ACCESS_TOKEN" >> local.properties; fi
           NREL=$([ -n "$NREL_API_KEY" ] && echo "built in" || echo "not set, app uses the shared DEMO_KEY")
           OCM=$([ -n "$OCM_API_KEY" ] && echo "built in" || echo "not set")
-          echo "KEY_STATUS=API keys in this build: NREL $NREL; Open Charge Map $OCM." >> "$GITHUB_ENV"
-          echo "NREL: $NREL / OCM: $OCM"
+          MAPBOX=$([ -n "$MAPBOX_ACCESS_TOKEN" ] && echo "built in" || echo "not set, routes use the OSRM test server")
+          echo "KEY_STATUS=API keys in this build: NREL $NREL; Open Charge Map $OCM; Mapbox $MAPBOX." >> "$GITHUB_ENV"
+          echo "NREL: $NREL / OCM: $OCM / Mapbox: $MAPBOX"
 
       # Fails the build early if the Open Charge Map key is set but rejected.
       - name: Check Open Charge Map key
@@ -44,6 +47,21 @@ jobs:
           CODE=$(curl -s -o ocm.json -w '%{http_code}' -H "X-API-Key: $OCM_API_KEY" \
             "https://api.openchargemap.io/v3/poi?output=json&maxresults=1&latitude=51.5&longitude=-0.12&distance=10&distanceunit=km&key=$OCM_API_KEY")
           echo "Open Charge Map answered HTTP $CODE: $(head -c 200 ocm.json)"
+          [ "$CODE" = "200" ]
+
+      # Fails the build early if the Mapbox token is set but rejected (or is a secret sk. token).
+      - name: Check Mapbox token
+        env:
+          MAPBOX_ACCESS_TOKEN: ${{ secrets.MAPBOX_ACCESS_TOKEN }}
+        run: |
+          if [ -z "$MAPBOX_ACCESS_TOKEN" ]; then echo "No MAPBOX_ACCESS_TOKEN secret; skipping"; exit 0; fi
+          case "$MAPBOX_ACCESS_TOKEN" in
+            pk.*) ;;
+            *) echo "MAPBOX_ACCESS_TOKEN must be a public token starting with pk. (it is built into the app)"; exit 1 ;;
+          esac
+          CODE=$(curl -s -o mapbox.json -w '%{http_code}' \
+            "https://api.mapbox.com/directions/v5/mapbox/driving/-0.1276,51.5072;-0.1,51.52?overview=false&access_token=$MAPBOX_ACCESS_TOKEN")
+          echo "Mapbox answered HTTP $CODE: $(head -c 200 mapbox.json)"
           [ "$CODE" = "200" ]
 
       - name: Unit tests

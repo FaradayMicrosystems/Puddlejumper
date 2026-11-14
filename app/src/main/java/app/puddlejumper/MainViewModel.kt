@@ -9,6 +9,10 @@ import app.puddlejumper.core.DistanceUnit
 import app.puddlejumper.core.Forecast
 import app.puddlejumper.core.LatLon
 import app.puddlejumper.core.LegReport
+import app.puddlejumper.core.MapboxRouter
+import app.puddlejumper.core.NavFix
+import app.puddlejumper.core.NavProgress
+import app.puddlejumper.core.NavigationEngine
 import app.puddlejumper.core.NominatimGeocoder
 import app.puddlejumper.core.NrelSource
 import app.puddlejumper.core.OpenMeteo
@@ -18,12 +22,16 @@ import app.puddlejumper.core.PhotonGeocoder
 import app.puddlejumper.core.Place
 import app.puddlejumper.core.RangePlanner
 import app.puddlejumper.core.RangeSettings
+import app.puddlejumper.core.RerouteGate
 import app.puddlejumper.core.Route
+import app.puddlejumper.core.Router
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
@@ -31,6 +39,18 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 data class Waypoint(val name: String, val location: LatLon, val isCurrentLocation: Boolean = false)
+
+/** Turn-by-turn guidance in progress. */
+data class NavUi(
+    /** The route being driven; replaced after each reroute. */
+    val route: Route,
+    /** Latest position on the route; null until the first GPS reading. */
+    val progress: NavProgress? = null,
+    val rerouting: Boolean = false,
+    val muted: Boolean = false,
+    /** Number of the stop the driver is heading to, as shown on the map (stop 1 is the start). */
+    val nextStopNumber: Int = 2,
+)
 
 data class UiState(
     val waypoints: List<Waypoint> = emptyList(),
@@ -50,13 +70,18 @@ data class UiState(
     /** Forecasts at stops, keyed by the stop's position. */
     val stopForecasts: Map<LatLon, Forecast> = emptyMap(),
     val loading: Boolean = false,
+    /** Non-null while navigating. */
+    val nav: NavUi? = null,
     /** One-shot message for a snackbar; cleared by [MainViewModel.messageShown]. */
     val message: String? = null,
 )
 
 class MainViewModel(app: Application) : AndroidViewModel(app) {
     val prefs = Prefs(app)
-    private val router = OsrmRouter()
+    /** Mapbox when this build has a token (repository secret MAPBOX_ACCESS_TOKEN), else the OSRM test server. */
+    private val router: Router =
+        BuildConfig.MAPBOX_ACCESS_TOKEN.takeIf { it.isNotBlank() }?.let { MapboxRouter(it) } ?: OsrmRouter()
+    val routerName: String get() = router.name
 
     private val _state = MutableStateFlow(
         UiState(
@@ -205,6 +230,81 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         launchLoading {
             val route = router.parse(Http.get(router.routeUrl(stops.map { it.location })))
             _state.update { it.copy(route = route, legs = plan(route, it.settings)) }
+        }
+    }
+
+    // ---- Turn-by-turn navigation ----
+
+    private val _speech = MutableSharedFlow<String>(extraBufferCapacity = 16)
+    /** Prompts to say out loud; the screen speaks them unless muted. */
+    val speech: SharedFlow<String> = _speech
+
+    private var engine: NavigationEngine? = null
+    /** Stops after the start, in order: leg i of the original route ends at navStops[i]. */
+    private var navStops: List<LatLon> = emptyList()
+    /** Legs finished on earlier routes of this trip (each reroute starts a new route from where you are). */
+    private var legOffset = 0
+    private val rerouteGate = RerouteGate()
+    private var rerouteJob: Job? = null
+
+    fun startNavigation() {
+        val s = _state.value
+        val route = s.route ?: return say("Plan a route first.")
+        engine = NavigationEngine(route)
+        navStops = s.waypoints.drop(1).map { it.location }
+        legOffset = 0
+        _state.update { it.copy(nav = NavUi(route = route, muted = prefs.voiceMuted)) }
+        if (router is OsrmRouter) say("Using the OSRM test server: this build has no Mapbox token.")
+    }
+
+    fun stopNavigation() {
+        rerouteJob?.cancel()
+        rerouteGate.done()
+        engine = null
+        navStops = emptyList()
+        _state.update { it.copy(nav = null) }
+    }
+
+    fun setVoiceMuted(muted: Boolean) {
+        prefs.voiceMuted = muted
+        _state.update { s -> s.nav?.let { s.copy(nav = it.copy(muted = muted)) } ?: s }
+    }
+
+    /** A GPS reading while navigating. */
+    fun onNavFix(fix: NavFix) {
+        val e = engine ?: return
+        val p = e.update(fix)
+        p.speak?.let { _speech.tryEmit(it) }
+        _state.update { s ->
+            val nav = s.nav ?: return@update s
+            s.copy(nav = nav.copy(progress = p, nextStopNumber = legOffset + p.legIndex + 2))
+        }
+        if (p.offRoute && rerouteGate.tryStart(fix.timeMs)) reroute(fix, p)
+    }
+
+    /** Fetches a new route from where you are to the stops you have not reached yet. */
+    private fun reroute(fix: NavFix, p: NavProgress) {
+        val remaining = navStops.drop(legOffset + p.legIndex)
+        if (remaining.isEmpty()) return rerouteGate.done()
+        _state.update { s -> s.nav?.let { s.copy(nav = it.copy(rerouting = true)) } ?: s }
+        _speech.tryEmit("Rerouting.")
+        rerouteJob = viewModelScope.launch {
+            try {
+                // Moving direction helps the router avoid starting with a U-turn; GPS bearing is noise when nearly stopped.
+                val heading = fix.bearingDeg?.takeIf { (fix.speedMps ?: 0.0) > 3.0 }
+                val route = router.parse(Http.get(router.routeUrl(listOf(fix.location) + remaining, heading)))
+                if (engine == null) return@launch
+                legOffset += p.legIndex
+                engine = NavigationEngine(route)
+                _state.update { s -> s.nav?.let { s.copy(nav = it.copy(route = route, progress = null, rerouting = false)) } ?: s }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _state.update { s -> s.nav?.let { s.copy(nav = it.copy(rerouting = false)) } ?: s }
+                say("Couldn't get a new route: ${e.message ?: e.javaClass.simpleName}")
+            } finally {
+                rerouteGate.done()
+            }
         }
     }
 

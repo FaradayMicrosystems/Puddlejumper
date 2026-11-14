@@ -1,0 +1,23 @@
+{"code":"Ok","uuid":"test","waypoints":[{"name":"Start","location":[5.0,52.0]},{"name":"Oak Lane","location":[5.01,52.005]}],
+"routes":[{"distance":1241.5,"duration":120.0,"weight":130.0,
+"geometry":{"type":"LineString","coordinates":[[5.0,52.0],[5.005,52.0],[5.01,52.0],[5.01,52.0025],[5.01,52.005]]},
+"legs":[{"distance":1241.5,"duration":120.0,"summary":"Main Street, Oak Lane","steps":[
+ {"distance":685.6,"duration":60.0,"name":"Main Street","mode":"driving",
+  "geometry":{"type":"LineString","coordinates":[[5.0,52.0],[5.005,52.0],[5.01,52.0]]},
+  "maneuver":{"type":"depart","bearing_after":90,"bearing_before":0,"location":[5.0,52.0],"instruction":"Drive east on Main Street."},
+  "voiceInstructions":[
+   {"distanceAlongGeometry":685.6,"announcement":"Drive east on Main Street. Then, in 700 metres, turn left onto Oak Lane.","ssmlAnnouncement":"<speak>x</speak>"},
+   {"distanceAlongGeometry":400.0,"announcement":"In 400 metres, turn left onto Oak Lane.","ssmlAnnouncement":"<speak>x</speak>"},
+   {"distanceAlongGeometry":80.0,"announcement":"Turn left onto Oak Lane.","ssmlAnnouncement":"<speak>x</speak>"}],
+  "bannerInstructions":[{"distanceAlongGeometry":685.6,"primary":{"text":"Oak Lane","type":"turn","modifier":"left","components":[{"text":"Oak Lane","type":"text"}]},"secondary":null}]},
+ {"distance":555.9,"duration":60.0,"name":"Oak Lane","mode":"driving",
+  "geometry":{"type":"LineString","coordinates":[[5.01,52.0],[5.01,52.0025],[5.01,52.005]]},
+  "maneuver":{"type":"turn","modifier":"left","bearing_after":0,"bearing_before":90,"location":[5.01,52.0],"instruction":"Turn left onto Oak Lane."},
+  "voiceInstructions":[
+   {"distanceAlongGeometry":555.9,"announcement":"Continue for 600 metres.","ssmlAnnouncement":"<speak>x</speak>"},
+   {"distanceAlongGeometry":60.0,"announcement":"You have arrived at your destination.","ssmlAnnouncement":"<speak>x</speak>"}],
+  "bannerInstructions":[{"distanceAlongGeometry":555.9,"primary":{"text":"You will arrive at your destination","type":"arrive","modifier":"straight"}}]},
+ {"distance":0.0,"duration":0.0,"name":"Oak Lane","mode":"driving",
+  "geometry":{"type":"LineString","coordinates":[[5.01,52.005],[5.01,52.005]]},
+  "maneuver":{"type":"arrive","bearing_after":0,"bearing_before":0,"location":[5.01,52.005],"instruction":"You have arrived at your destination."},
+  "voiceInstructions":[],"bannerInstructions":[]}]}]}]}
