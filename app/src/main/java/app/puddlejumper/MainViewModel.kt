@@ -62,6 +62,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         UiState(
             settings = RangeSettings(prefs.fullRangeMeters, prefs.reservePercent, prefs.chargeAtEachStop),
             unit = prefs.unit,
+            // Stops from the last session. GPS adds "My location" in front once it has a fix.
+            waypoints = prefs.savedStops,
             multiJumpView = prefs.multiJumpView,
             weatherOn = prefs.weatherOn,
         )
@@ -176,6 +178,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     // Declared after the weather fields it uses, so they exist when it first runs.
     init {
+        // Save stops whenever they change, so they are still there after the app is closed.
+        viewModelScope.launch {
+            _state.map { it.waypoints }
+                .distinctUntilChanged()
+                .collect { prefs.savedStops = it }
+        }
         // Stops added, removed or moved: fetch weather for them too.
         viewModelScope.launch {
             _state.map { it.weatherOn to it.waypoints.map { w -> w.location } }

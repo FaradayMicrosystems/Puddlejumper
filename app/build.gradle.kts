@@ -22,8 +22,8 @@ android {
         applicationId = "app.puddlejumper"
         minSdk = 26
         targetSdk = 35
-        versionCode = 12
-        versionName = "0.6.5"
+        versionCode = 13
+        versionName = "0.6.6"
         buildConfigField("String", "NREL_API_KEY", key("NREL_API_KEY", "DEMO_KEY"))
         // Never commit keys here: they come from local.properties or the CI secret.
         buildConfigField("String", "OCM_API_KEY", key("OCM_API_KEY"))

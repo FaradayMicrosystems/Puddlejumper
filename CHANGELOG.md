@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.6.6 — 2026-11-14
+
+- Your stops are saved and come back after the app is closed. "My location" is still added from GPS.
+- GitHub builds check the NREL key (if the `NREL_API_KEY` secret is set) and stop if NREL rejects it.
+- README: steps to get a free NREL key and add it; weather section describes the 3-day badges and 5-day detail.
+
 ## v0.6.5 — 2026-10-28
 
 - Weather badges now show 3 days in short form (symbol and high/low °C for each day).
@@ -12,6 +18,7 @@
   appears at the map centre and above every stop. Tap a badge for the 3-day forecast: conditions,
   °C, rain in mm with chance, and maximum wind in km/h. The centre badge follows the map as you pan.
 - Forecasts come from Open-Meteo (free, no key needed).
+
 ## v0.6.3 — 2026-10-28
 
 - Chargers refresh by themselves: after you tap Chargers once, panning or zooming the map loads
