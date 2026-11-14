@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Range circles are now road-accurate range areas. Each stop's green and orange areas (and the
+  multi-jump rings) follow real driving distance: they shrink where roads wind and stop at coasts and
+  lakes. Uses one OSRM request per stop (free, no key). The slider still sets the full-charge range,
+  and the area rescales instantly; a new lookup runs only when the range changes by more than 25%.
+- Until the road data loads, or when offline, a stop shows the old straight-line circle.
+
 ## v0.6.5 — 2026-10-28
 
 - Weather badges now show 3 days in short form (symbol and high/low °C for each day).

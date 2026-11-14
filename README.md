@@ -1,15 +1,17 @@
 # Puddlejumper
 
-Android navigation prototype for electric vehicles. Every stop on the map shows a circle for your
-car's full-charge range, so you can see at a glance how far you can get from each hop.
+Android navigation prototype for electric vehicles. Every stop on the map shows the area your
+car's full-charge range reaches by road, so you can see at a glance how far you can get from each hop.
 
 ## What works in this first version
 
 - OpenStreetMap map with pinch zoom. Your current location becomes stop 1 automatically.
 - Add stops by tapping and holding anywhere on the map (the pin is named by its street address), searching a place, or tapping a charger and choosing **Add as stop**.
-- **Range circles** at every stop:
-  - Green circle: the distance you can drive from that stop on a full charge (set with the slider).
-  - Orange circle: range left when you arrive at that stop (shown after you tap **Route**).
+- **Range areas** at every stop, measured along real roads (not a straight-line circle):
+  - Green area: where you can drive from that stop on a full charge (set with the slider).
+  - Orange area: where the range left on arrival gets you (shown after you tap **Route**).
+  - Each stop first shows a straight-line circle, then reshapes to the road area within a few seconds.
+    It stays a circle if the road lookup fails (offline). Tap a stop to see which one you are looking at.
 - **Multi-jump view** tick box: dashed rings at 2 and 3 full charges around each stop (up to 3 hops).
 - **Route**: driving route through all stops, total distance and time, and range on arrival per leg.
   Legs that drop below your reserve are marked with ⚠.
@@ -65,12 +67,14 @@ and `./gradlew :core:test` for the unit tests.
 
 ## Project layout
 
-- `core/` — plain Kotlin, no Android: range math, geodesic circles, route and charger parsing. Unit-tested.
+- `core/` — plain Kotlin, no Android: range math, road-network range areas, route and charger parsing. Unit-tested.
 - `app/` — Android app: map screen, overlays, settings.
 
 ## Next steps
 
 - Real turn-by-turn guidance (voice, rerouting, traffic): move the map and routing to the
-  Mapbox Navigation SDK v3. Range circles and charger markers keep working through `core/`.
+  Mapbox Navigation SDK v3. Range areas and charger markers keep working through `core/`.
 - Live charger availability: PlugShare license or TomTom.
-- Range circles are straight-line distance. A road-network "reachable area" (isochrone) is more accurate.
+- Range areas sample 64 points per stop with one OSRM `table` request (public demo server). They are an
+  estimate between samples; for production, use your own OSRM server or the Mapbox Matrix API
+  (Mapbox's Isochrone API stops at 100 km, too short for EV range).

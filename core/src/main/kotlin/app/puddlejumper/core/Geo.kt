@@ -33,6 +33,16 @@ object Geo {
         return LatLon(Math.toDegrees(lat2), lonDeg)
     }
 
+    /** Initial compass bearing (0..360) from [a] towards [b]. */
+    fun initialBearing(a: LatLon, b: LatLon): Double {
+        val lat1 = Math.toRadians(a.lat)
+        val lat2 = Math.toRadians(b.lat)
+        val dLon = Math.toRadians(b.lon - a.lon)
+        val y = sin(dLon) * cos(lat2)
+        val x = cos(lat1) * sin(lat2) - sin(lat1) * cos(lat2) * cos(dLon)
+        return (Math.toDegrees(atan2(y, x)) + 360) % 360
+    }
+
     /** Closed ring of points approximating a geodesic circle. */
     fun circle(center: LatLon, radiusM: Double, segments: Int = 90): List<LatLon> =
         (0..segments).map { destination(center, 360.0 * it / segments, radiusM) }
