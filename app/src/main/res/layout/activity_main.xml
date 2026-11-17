@@ -56,7 +56,7 @@
         android:contentDescription="@string/my_location"
         android:src="@android:drawable/ic_menu_mylocation" />
 
-    <com.google.android.material.card.MaterialCardView
+    <app.puddlejumper.SwipeHideCardView
         android:id="@+id/planCard"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -67,7 +67,18 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:padding="12dp">
+            android:paddingStart="12dp"
+            android:paddingEnd="12dp"
+            android:paddingBottom="12dp"
+            android:paddingTop="6dp">
+
+            <!-- Swipe down on the panel to hide it. -->
+            <View
+                android:layout_width="40dp"
+                android:layout_height="4dp"
+                android:layout_gravity="center_horizontal"
+                android:layout_marginBottom="6dp"
+                android:background="@drawable/drag_handle" />
 
             <TextView
                 android:id="@+id/rangeLabel"
@@ -162,7 +173,7 @@
                     android:text="@string/weather_layer" />
             </LinearLayout>
         </LinearLayout>
-    </com.google.android.material.card.MaterialCardView>
+    </app.puddlejumper.SwipeHideCardView>
 
     <!-- Turn-by-turn: next manoeuvre banner (top) and trip bar (bottom). Shown only while navigating. -->
     <com.google.android.material.card.MaterialCardView
@@ -224,7 +235,7 @@
         </LinearLayout>
     </com.google.android.material.card.MaterialCardView>
 
-    <com.google.android.material.card.MaterialCardView
+    <app.puddlejumper.SwipeHideCardView
         android:id="@+id/navBar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -263,7 +274,44 @@
                 android:layout_marginStart="6dp"
                 android:text="@string/nav_end" />
         </LinearLayout>
-    </com.google.android.material.card.MaterialCardView>
+    </app.puddlejumper.SwipeHideCardView>
+
+    <!-- Handles shown when a bottom panel is swiped away. Tap or swipe up to bring it back. -->
+    <FrameLayout
+        android:id="@+id/planPeek"
+        android:layout_width="96dp"
+        android:layout_height="40dp"
+        android:layout_gravity="bottom|center_horizontal"
+        android:background="@drawable/peek_tab"
+        android:contentDescription="@string/show_panel"
+        android:focusable="true"
+        android:clickable="true"
+        android:visibility="gone">
+
+        <View
+            android:layout_width="40dp"
+            android:layout_height="5dp"
+            android:layout_gravity="center"
+            android:background="@drawable/drag_handle" />
+    </FrameLayout>
+
+    <FrameLayout
+        android:id="@+id/navPeek"
+        android:layout_width="96dp"
+        android:layout_height="40dp"
+        android:layout_gravity="bottom|center_horizontal"
+        android:background="@drawable/peek_tab"
+        android:contentDescription="@string/show_panel"
+        android:focusable="true"
+        android:clickable="true"
+        android:visibility="gone">
+
+        <View
+            android:layout_width="40dp"
+            android:layout_height="5dp"
+            android:layout_gravity="center"
+            android:background="@drawable/drag_handle" />
+    </FrameLayout>
 
     <ProgressBar
         android:id="@+id/progress"
