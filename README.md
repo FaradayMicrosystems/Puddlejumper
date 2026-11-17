@@ -1,21 +1,18 @@
 # Puddlejumper
 
-Android navigation prototype for electric vehicles. A yellow **range tree** grows out from your
-position along the roads, as far as your battery gets you, with hills taken into account.
+Android navigation prototype for electric vehicles. Every stop on the map shows the area your
+car's full-charge range reaches by road, so you can see at a glance how far you can get from each hop.
 
 ## What works in this first version
 
 - OpenStreetMap map with pinch zoom. Your current location becomes stop 1 automatically.
 - Add stops by tapping and holding anywhere on the map (the pin is named by its street address), searching a place, or tapping a charger and choosing **Add as stop**.
-- **Range tree**: yellow roads from your location in 24 directions, each cut where the battery
-  (above your reserve) runs out. Energy = your average kWh/100 km plus terrain: climbs cost extra,
-  descents win some back through regen. It follows your location marker and rebuilds after you move 2 km.
-  - The slider sets the battery % now. While driving (above about 15 km/h) the app counts it down
-    from distance × consumption; move the slider to correct it.
-  - Settings: usable battery (kWh), average consumption (kWh/100 km), car weight (kg, for hills),
-    and the battery countdown switch. Full-charge range = kWh ÷ consumption.
-  - Roads come from Mapbox when the build has a token, otherwise the OSRM test server
-    (24 requests about 1 s apart, so the first tree takes about 25 s). Heights: Open-Meteo Elevation (no key).
+- **Range areas** at every stop, measured along real roads (not a straight-line circle):
+  - Green area: where you can drive from that stop on a full charge (set with the slider).
+  - Orange area: where the range left on arrival gets you (shown after you tap **Route**).
+  - Each stop first shows a straight-line circle, then reshapes to the road area within a few seconds.
+    It stays a circle if the road lookup fails (offline). Tap a stop to see which one you are looking at.
+- **Multi-jump view** tick box: dashed rings at 2 and 3 full charges around each stop (up to 3 hops).
 - **Route**: driving route through all stops, total distance and time, and range on arrival per leg.
   Legs that drop below your reserve are marked with ⚠.
 - **Charge to full at each stop** switch. Off means range carries over from stop to stop.
@@ -27,7 +24,7 @@ position along the roads, as far as your battery gets you, with hills taken into
   (symbol and high/low °C). Tap a badge for the full 5-day forecast: conditions, °C, rain in mm
   with chance, and maximum wind in km/h.
 - Your stops are saved and come back when you reopen the app. **Clear** removes them.
-- Settings: your car, arrival reserve %, charger data source. All distances are in km.
+- Settings: arrival reserve %, charger data source. All distances are in km.
 
 Marker legend: purple **F** = DC fast, blue **2** = Level 2, light blue **1** = Level 1,
 red = down or under maintenance, gray = planned, orange = in use (live sources only).
@@ -40,7 +37,6 @@ red = down or under maintenance, gray = planned, orange = in use (live sources o
 | Routing | OSRM public demo server | No key. Testing only. |
 | Search suggestions | Photon (OSM) | No key. |
 | Weather (3-day badges, 5-day detail) | Open-Meteo | No key. Metric (°C, mm, km/h). |
-| Terrain heights for the range tree | Open-Meteo Elevation | No key. 90 m data, 100 points per request. |
 | Search on Enter, pin names | Nominatim (OSM) | No key. Max 1 request per second. |
 | Chargers | NREL AFDC (US and Canada) | Works with `DEMO_KEY` (low hourly limit). Free key at developer.nrel.gov. |
 | Chargers (default when keyed) | Open Charge Map (worldwide) | Key from the `OCM_API_KEY` secret, never in the code. |
