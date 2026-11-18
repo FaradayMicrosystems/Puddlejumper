@@ -13,5 +13,6 @@
     <string name="hint_long_press">Tap and hold the map to drop a stop, or search a place.</string>
     <string name="start">Start</string>
     <string name="nav_end">End</string>
+    <string name="show_panel">Show panel</string>
     <string name="nav_mute">Mute or unmute voice</string>
 </resources>

@@ -147,6 +147,9 @@ class MainActivity : AppCompatActivity() {
         weatherLayer = findViewById(R.id.weatherLayer)
         summary = findViewById(R.id.summary)
         progress = findViewById(R.id.progress)
+        // Bottom panels: swipe down to hide, tap the handle at the bottom edge to bring back.
+        findViewById<SwipeHideCardView>(R.id.planCard).peek = findViewById(R.id.planPeek)
+        findViewById<SwipeHideCardView>(R.id.navBar).peek = findViewById(R.id.navPeek)
 
         setUpMap()
         setUpControls()
