@@ -15,8 +15,6 @@ data class RangeSettings(
     val fullRangeMeters: Double,
     val reservePercent: Int = 10,
     val chargeToFullAtEachStop: Boolean = true,
-    /** Range when setting off from stop 1 (the battery you have now). Null means a full charge. */
-    val startRangeMeters: Double? = null,
 ) {
     init {
         require(fullRangeMeters > 0) { "fullRangeMeters must be positive" }
@@ -37,11 +35,11 @@ data class LegReport(
 
 object RangePlanner {
     /**
-     * Range left on arrival at each stop. Starts with [RangeSettings.startRangeMeters] (full when null). When [RangeSettings.chargeToFullAtEachStop]
+     * Range left on arrival at each stop. Starts on a full charge. When [RangeSettings.chargeToFullAtEachStop]
      * is false, range carries over between legs (pass-through waypoints).
      */
     fun plan(legDistancesMeters: List<Double>, settings: RangeSettings): List<LegReport> {
-        var range = settings.startRangeMeters ?: settings.fullRangeMeters
+        var range = settings.fullRangeMeters
         return legDistancesMeters.mapIndexed { i, leg ->
             if (i > 0 && settings.chargeToFullAtEachStop) range = settings.fullRangeMeters
             val depart = range
