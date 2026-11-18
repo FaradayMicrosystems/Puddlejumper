@@ -3,8 +3,8 @@ package app.puddlejumper
 import android.Manifest
 import android.content.pm.PackageManager
 import android.graphics.Color
+import android.graphics.DashPathEffect
 import android.os.Build
-import android.location.Location
 import android.os.Bundle
 import android.view.View
 import android.view.WindowManager
@@ -12,7 +12,6 @@ import android.view.HapticFeedbackConstants
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
 import android.widget.ArrayAdapter
-import android.widget.EditText
 import android.widget.AutoCompleteTextView
 import android.widget.Button
 import android.widget.Filter
@@ -37,6 +36,7 @@ import app.puddlejumper.core.Guidance
 import app.puddlejumper.core.Km
 import app.puddlejumper.core.LatLon
 import app.puddlejumper.core.Place
+import app.puddlejumper.core.ReachProfile
 import app.puddlejumper.core.Route
 import app.puddlejumper.core.WeatherFormat
 import com.google.android.material.checkbox.MaterialCheckBox
@@ -62,9 +62,9 @@ import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.MapEventsOverlay
 import org.osmdroid.views.overlay.Marker
 import org.osmdroid.views.overlay.Overlay
+import org.osmdroid.views.overlay.Polygon
 import org.osmdroid.views.overlay.Polyline
 import org.osmdroid.views.overlay.mylocation.GpsMyLocationProvider
-import org.osmdroid.views.overlay.mylocation.IMyLocationProvider
 import org.osmdroid.views.overlay.mylocation.MyLocationNewOverlay
 import java.text.DateFormat
 import java.util.Date
@@ -78,7 +78,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var rangeLabel: TextView
     private lateinit var rangeSlider: Slider
     private lateinit var chargeEachStop: MaterialSwitch
-    private lateinit var rangeTree: MaterialCheckBox
+    private lateinit var multiJump: MaterialCheckBox
     private lateinit var weatherLayer: MaterialCheckBox
     private lateinit var summary: TextView
     private lateinit var progress: ProgressBar
@@ -143,7 +143,7 @@ class MainActivity : AppCompatActivity() {
         rangeLabel = findViewById(R.id.rangeLabel)
         rangeSlider = findViewById(R.id.rangeSlider)
         chargeEachStop = findViewById(R.id.chargeEachStop)
-        rangeTree = findViewById(R.id.rangeTree)
+        multiJump = findViewById(R.id.multiJump)
         weatherLayer = findViewById(R.id.weatherLayer)
         summary = findViewById(R.id.summary)
         progress = findViewById(R.id.progress)
@@ -216,9 +216,9 @@ class MainActivity : AppCompatActivity() {
         findViewById<ImageButton>(R.id.settings).setOnClickListener { showSettings() }
         findViewById<FloatingActionButton>(R.id.myLocation).setOnClickListener { onMyLocation() }
 
-        rangeSlider.addOnChangeListener { _, value, fromUser -> if (fromUser) vm.setBatteryPercent(value.toDouble()) }
+        rangeSlider.addOnChangeListener { _, value, fromUser -> if (fromUser) vm.setFullRange(value.toDouble()) }
         chargeEachStop.setOnCheckedChangeListener { _, on -> vm.setChargeAtEachStop(on) }
-        rangeTree.setOnCheckedChangeListener { _, on -> vm.setRangeTreeOn(on) }
+        multiJump.setOnCheckedChangeListener { _, on -> vm.setMultiJumpView(on) }
         weatherLayer.setOnCheckedChangeListener { _, on ->
             vm.setWeatherCenter(viewCenter())
             vm.setWeatherOn(on)
@@ -243,14 +243,15 @@ class MainActivity : AppCompatActivity() {
     private fun render(s: UiState) {
         progress.isVisible = s.loading
 
-        // Battery controls: the slider is the charge now; the label says how far that gets you.
-        val snapped = s.batteryPercent.roundToInt().toFloat().coerceIn(rangeSlider.valueFrom, rangeSlider.valueTo)
+        // Range controls
+        val v = Km.fromMeters(s.settings.fullRangeMeters)
+        val snapped = ((v / 5).roundToInt() * 5f).coerceIn(rangeSlider.valueFrom, rangeSlider.valueTo)
         if (rangeSlider.value != snapped) rangeSlider.value = snapped
-        rangeLabel.text = batteryText(s)
+        rangeLabel.text = "Full-charge range: ${Km.format(s.settings.fullRangeMeters)}"
         if (chargeEachStop.isChecked != s.settings.chargeToFullAtEachStop) {
             chargeEachStop.isChecked = s.settings.chargeToFullAtEachStop
         }
-        if (rangeTree.isChecked != s.rangeTreeOn) rangeTree.isChecked = s.rangeTreeOn
+        if (multiJump.isChecked != s.multiJumpView) multiJump.isChecked = s.multiJumpView
         if (weatherLayer.isChecked != s.weatherOn) weatherLayer.isChecked = s.weatherOn
         summary.text = summaryText(s)
         findViewById<Button>(R.id.routeButton).text = getString(if (s.route != null) R.string.start else R.string.route)
@@ -266,20 +267,6 @@ class MainActivity : AppCompatActivity() {
             Snackbar.make(map, it, Snackbar.LENGTH_LONG).show()
             vm.messageShown()
         }
-    }
-
-    private fun batteryText(s: UiState): String {
-        val flat = s.ev.fullRangeMeters * (s.batteryPercent - s.settings.reservePercent).coerceAtLeast(0.0) / 100.0
-        val head = "Battery ${s.batteryPercent.roundToInt()}% · about ${Km.format(flat)} to ${s.settings.reservePercent}%"
-        val tree = s.tree
-        val note = when {
-            !s.rangeTreeOn -> ""
-            tree == null -> "\nRange tree: waiting for your location"
-            tree.building -> "\nRange tree: loading roads…"
-            !tree.terrain -> "\nRange tree: flat estimate (terrain not loaded)"
-            else -> "\nRange tree: up to ${Km.format(tree.maxRoadMeters)} by road, terrain included"
-        }
-        return head + note
     }
 
     private fun summaryText(s: UiState): String {
@@ -304,12 +291,26 @@ class MainActivity : AppCompatActivity() {
         // Arrival range for stop i (i >= 1) comes from leg i-1.
         val arriveAt = s.legs.associate { it.legIndex + 1 to it.arriveRangeMeters }
 
-        // Range tree: yellow roads from your position as far as the battery goes (dark edge so it shows on pale maps).
-        s.tree?.takeIf { s.rangeTreeOn }?.branches?.forEach { b ->
-            if (b.points.size < 2) return@forEach
-            val pts = b.points.map { GeoPoint(it.lat, it.lon) }
-            drawn += treeLine(pts, Color.argb(170, 120, 90, 0), 11f)
-            drawn += treeLine(pts, Color.rgb(255, 214, 0), 6f)
+        s.waypoints.forEachIndexed { i, wp ->
+            // Road-network reach when loaded, else a straight-line circle until it arrives.
+            val reach = s.reach[wp.location]
+            // Outer area: how far you can drive from this stop on a full charge.
+            drawn += area(wp.location, s.settings.fullRangeMeters, reach, Color.rgb(27, 127, 90), 0x221B7F5A)
+            // Multi-jump view: dashed rings for 2 and 3 full charges (charging to full at each hop).
+            if (s.multiJumpView) {
+                for (hop in 2..3) {
+                    drawn += area(
+                        wp.location, s.settings.fullRangeMeters * hop, reach,
+                        stroke = if (hop == 2) Color.argb(200, 27, 127, 90) else Color.argb(140, 27, 127, 90),
+                        fill = Color.TRANSPARENT,
+                        dashed = true,
+                    )
+                }
+            }
+            // Inner area: range left when you arrive here, before charging.
+            arriveAt[i]?.takeIf { it > 0 }?.let {
+                drawn += area(wp.location, it, reach, Color.rgb(230, 130, 0), 0x18E68200)
+            }
         }
 
         // While navigating, draw the route being driven (it changes after a reroute).
@@ -375,14 +376,18 @@ class MainActivity : AppCompatActivity() {
             .show()
     }
 
-    private fun treeLine(points: List<GeoPoint>, color: Int, width: Float) = Polyline(map).apply {
-        setPoints(points)
-        outlinePaint.color = color
-        outlinePaint.strokeWidth = width
-        outlinePaint.strokeCap = android.graphics.Paint.Cap.ROUND
-        outlinePaint.strokeJoin = android.graphics.Paint.Join.ROUND
+    /** Area reachable by road with [rangeM] from [center]; a straight-line circle when [reach] is null. */
+    private fun area(
+        center: LatLon, rangeM: Double, reach: ReachProfile?, stroke: Int, fill: Int, dashed: Boolean = false,
+    ) = Polygon(map).apply {
+        val ring = reach?.polygon(rangeM) ?: Geo.circle(center, rangeM)
+        points = ring.map { GeoPoint(it.lat, it.lon) }
+        outlinePaint.color = stroke
+        if (dashed) outlinePaint.pathEffect = DashPathEffect(floatArrayOf(24f, 16f), 0f)
+        outlinePaint.strokeWidth = 4f
+        fillPaint.color = fill
         infoWindow = null
-        // Let taps fall through to the map so long-press still adds stops on the tree.
+        // Let taps fall through to the map so long-press still adds stops inside a range area.
         setOnClickListener { _, _, _ -> false }
     }
 
@@ -417,7 +422,11 @@ class MainActivity : AppCompatActivity() {
 
     private fun showWaypoint(index: Int, wp: Waypoint, arriveRangeM: Double?) {
         val msg = buildString {
-            append("Full-charge range: ${Km.format(vm.state.value.settings.fullRangeMeters)} (flat roads)")
+            append("Full-charge range: ${Km.format(vm.state.value.settings.fullRangeMeters)}")
+            append(
+                if (wp.location in vm.state.value.reach) "\nShaded area: where that range gets you by road"
+                else "\nShaded area: straight-line estimate (road data not loaded yet)"
+            )
             arriveRangeM?.let { append("\nRange left on arrival: ${Km.format(it.coerceAtLeast(0.0))}") }
         }
         MaterialAlertDialogBuilder(this)
@@ -488,14 +497,6 @@ class MainActivity : AppCompatActivity() {
         reserve.value = (state.settings.reservePercent / 5 * 5).toFloat().coerceIn(0f, 50f)
         reserveLabel.text = "Arrival reserve: ${reserve.value.toInt()}%"
         reserve.addOnChangeListener { _, v, _ -> reserveLabel.text = "Arrival reserve: ${v.toInt()}%" }
-        val usable = view.findViewById<EditText>(R.id.usableKwh)
-        val consumption = view.findViewById<EditText>(R.id.consumption)
-        val mass = view.findViewById<EditText>(R.id.massKg)
-        val countDown = view.findViewById<MaterialSwitch>(R.id.countDownBattery)
-        usable.setText(trim(state.ev.usableKwh))
-        consumption.setText(trim(state.ev.kwhPer100Km))
-        mass.setText(trim(state.ev.massKg))
-        countDown.isChecked = prefs.countDownBattery
         view.findViewById<TextView>(R.id.versionLabel).text = "Installed: v${BuildConfig.VERSION_NAME}"
         val voiceButton = view.findViewById<Button>(R.id.navVoice)
         voiceButton.text = voiceLabel(prefs.navVoice)
@@ -507,12 +508,6 @@ class MainActivity : AppCompatActivity() {
             .setView(view)
             .setPositiveButton("Save") { _, _ ->
                 vm.setReservePercent(reserve.value.toInt())
-                vm.setEv(
-                    usable.text.toString().toDoubleOrNull() ?: state.ev.usableKwh,
-                    consumption.text.toString().toDoubleOrNull() ?: state.ev.kwhPer100Km,
-                    mass.text.toString().toDoubleOrNull() ?: state.ev.massKg,
-                )
-                prefs.countDownBattery = countDown.isChecked
                 prefs.chargerSource =
                     if (view.findViewById<RadioButton>(R.id.sourceOcm).isChecked) ChargerSourceType.OPEN_CHARGE_MAP
                     else ChargerSourceType.NREL
@@ -524,9 +519,6 @@ class MainActivity : AppCompatActivity() {
             updater.checkNow()
         }
     }
-
-    /** 75.0 -> "75", 17.5 -> "17.5". */
-    private fun trim(v: Double) = if (v % 1.0 == 0.0) v.toLong().toString() else v.toString()
 
     private fun onMyLocation(follow: Boolean = true) {
         followOnGrant = follow
@@ -546,15 +538,7 @@ class MainActivity : AppCompatActivity() {
      * at launch the map centres once and then stays where you pan it.
      */
     private fun startLocation(follow: Boolean = followOnGrant) {
-        val overlay = locationOverlay ?: object : MyLocationNewOverlay(GpsMyLocationProvider(this), map) {
-            // Every GPS reading moves the range tree and counts the battery down while driving.
-            override fun onLocationChanged(location: Location?, source: IMyLocationProvider?) {
-                super.onLocationChanged(location, source)
-                location ?: return
-                val speed = if (location.hasSpeed()) location.speed.toDouble() else null
-                runOnUiThread { vm.onLocation(LatLon(location.latitude, location.longitude), speed) }
-            }
-        }.also {
+        val overlay = locationOverlay ?: MyLocationNewOverlay(GpsMyLocationProvider(this), map).also {
             locationOverlay = it
             map.overlays.add(it)
         }

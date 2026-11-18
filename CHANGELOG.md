@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.7.3 — 2026-11-17
+
+- Back to range rings: the range tree from v0.7.1 is removed because it took too long to load.
+  Each stop again shows its road-accurate range area (green: full charge, orange: range on arrival)
+  and the multi-jump rings tick box is back. One quick lookup per stop.
+- The main slider is the full-charge range again. The battery %, kWh and kWh/100 km settings are removed.
+
 ## v0.7.2 — 2026-11-14
 
 - Navigation prompts are spoken in a Scottish male voice, built into the app and working offline.
