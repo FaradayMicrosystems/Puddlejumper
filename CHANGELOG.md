@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.7.4 — 2026-11-18
+
+- Swipe the bottom panel down to hide it. A small tab stays at the bottom edge: tap it or swipe up to
+  bring the panel back. The trip bar while navigating hides the same way.
+
 ## v0.7.3 — 2026-11-17
 
 - Back to range rings: the range tree from v0.7.1 is removed because it took too long to load.
