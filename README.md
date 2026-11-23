@@ -3,7 +3,7 @@
 Android navigation prototype for electric vehicles. Every stop on the map shows the area your
 car's full-charge range reaches by road, so you can see at a glance how far you can get from each hop.
 
-## What works in this first version
+## What it does
 
 - OpenStreetMap map with pinch zoom. Your current location becomes stop 1 automatically.
 - Add stops by tapping and holding anywhere on the map (the pin is named by its street address), searching a place, or tapping a charger and choosing **Add as stop**.
@@ -94,11 +94,7 @@ existing copy. Keep a backup of the key: if it is lost, every phone must uninsta
 - `core/` — plain Kotlin, no Android: range math, road-network range areas, route and charger parsing. Unit-tested.
 - `app/` — Android app: map screen, overlays, settings.
 
-## Next steps
+## Documentation
 
-- Real turn-by-turn guidance (voice, rerouting, traffic): move the map and routing to the
-  Mapbox Navigation SDK v3. Range areas and charger markers keep working through `core/`.
-- Live charger availability: PlugShare license or TomTom.
-- Range areas sample 64 points per stop with one OSRM `table` request (public demo server). They are an
-  estimate between samples; for production, use your own OSRM server or the Mapbox Matrix API
-  (Mapbox's Isochrone API stops at 100 km, too short for EV range).
+Developer documentation is in [`docs/`](docs/README.md). Taking over the project? Start with
+[`HANDOVER.md`](HANDOVER.md). Open work and limitations: [`docs/known-issues.md`](docs/known-issues.md).
